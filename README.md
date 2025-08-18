@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# wohnungsuebergabe
-=======
 # Wohnungsübergabe – Start-Setup (PHP + Docker + MySQL)
 
 Webbasierte Übergabedatenbank (Einzug/Auszug/Zwischenprotokoll) gemäß Pflichtenheft.
