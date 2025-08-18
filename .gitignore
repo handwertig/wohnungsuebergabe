@@ -1,0 +1,8 @@
+vendor/
+.env
+.env.local
+.env.*.local
+db_data/
+node_modules/
+.idea/
+.DS_Store
