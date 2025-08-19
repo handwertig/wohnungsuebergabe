@@ -12,14 +12,11 @@ final class View {
         echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">';
         echo '</head><body>';
         echo '<nav class="navbar navbar-expand-lg navbar-dark bg-primary"><div class="container-fluid">';
-        echo '<a class="navbar-brand" href="/dashboard">Wohnungsübergabe</a>';
+        echo '<a class="navbar-brand" href="/protocols">Wohnungsübergabe</a>';
         echo '<div class="collapse navbar-collapse"><ul class="navbar-nav me-auto mb-2 mb-lg-0">';
-        echo '<li class="nav-item"><a class="nav-link" href="/owners">Eigentümer</a></li>';
-        echo '<li class="nav-item"><a class="nav-link" href="/managers">Hausverwaltungen</a></li>';
-        echo '<li class="nav-item"><a class="nav-link" href="/objects">Objekte</a></li>';
-        echo '<li class="nav-item"><a class="nav-link" href="/units">Wohneinheiten</a></li>';
         echo '<li class="nav-item"><a class="nav-link" href="/protocols">Protokolle</a></li>';
-        echo '<li class="nav-item"><a class="nav-link" href="/users">Benutzer</a></li>';
+        echo '<li class="nav-item"><a class="nav-link" href="/protocols/wizard/start">Neues Protokoll</a></li>';
+        echo '<li class="nav-item"><a class="nav-link" href="/settings">Einstellungen</a></li>';
         echo '</ul><span class="navbar-text"><a href="/logout" class="text-white">Logout</a></span>';
         echo '</div></div></nav>';
         echo '<main class="container py-4">';

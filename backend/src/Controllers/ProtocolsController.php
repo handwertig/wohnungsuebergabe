@@ -24,7 +24,7 @@ final class ProtocolsController
             ORDER BY p.created_at DESC
         ")->fetchAll(PDO::FETCH_ASSOC);
 
-        $html = '<div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h4 mb-0">Protokolle</h1><a class="btn btn-sm btn-primary" href="/protocols/new">Neu</a></div>';
+        $html = '<div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h4 mb-0">Protokolle</h1><a class="btn btn-sm btn-primary" href="/protocols/wizard/start">Neu</a></div>';
         $html .= '<div class="table-responsive"><table class="table table-striped"><thead><tr><th>Typ</th><th>Mieter</th><th>Objekt / WE</th><th>Erstellt</th><th class="text-end">Aktion</th></tr></thead><tbody>';
         foreach ($rows as $r) {
             $obj = $r['city'].', '.$r['street'].' '.$r['house_no'].' – '.$r['unit_label'];
