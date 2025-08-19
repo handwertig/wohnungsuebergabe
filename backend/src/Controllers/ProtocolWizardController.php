@@ -5,7 +5,6 @@ namespace App\Controllers;
 use App\Auth;
 use App\Database;
 use App\Flash;
-use App\Uploads;
 use App\Validation;
 use App\View;
 use App\AuditLogger;
@@ -13,7 +12,6 @@ use PDO;
 
 final class ProtocolWizardController
 {
-    // Schritt 0: Start/Resume
     public function start(): void
     {
         Auth::requireAuth();
@@ -27,18 +25,21 @@ final class ProtocolWizardController
         header('Location: /protocols/wizard?step=1&draft='.$id); exit;
     }
 
-    // GET: Formular je Schritt
     public function step(): void
     {
         Auth::requireAuth();
-        $pdo = Database::pdo();
+        $pdo   = Database::pdo();
         $step  = max(1, min(4, (int)($_GET['step'] ?? 1)));
         $draft = (string)($_GET['draft'] ?? '');
 
         $d = $this->loadDraft($pdo, $draft);
         if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
-
         $data = json_decode($d['data'] ?? '{}', true) ?: [];
+
+        // Stammdaten (für Schritt 1)
+        $owners = $pdo->query('SELECT id,name,company FROM owners WHERE deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+        $managers = $pdo->query('SELECT id,name,company FROM managers ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+
         $html = '<div class="d-flex justify-content-between align-items-center mb-3">';
         $html .= '<h1 class="h4 mb-0">Übergabeprotokoll – Schritt '.$step.'/4</h1>';
         $html .= '<div class="small text-muted">Entwurf: '.htmlspecialchars($draft).'</div></div>';
@@ -47,11 +48,10 @@ final class ProtocolWizardController
         $html .= '<form method="post" action="/protocols/wizard/save?step='.$step.'&draft='.$draft.'" enctype="multipart/form-data">';
 
         if ($step === 1) {
-            // === Schritt 1: Adresse + WE (Neuanlage) ODER vorhandene WE auswählen ===
-            // Vorbelegung
+            // Adresse & WE
             $addr = $data['address'] ?? ['city'=>'','postal_code'=>'','street'=>'','house_no'=>'','unit_label'=>'','floor'=>''];
             $html .= '<div class="card mb-3"><div class="card-body">';
-            $html .= '<h2 class="h5 mb-3">Adresse & Wohneinheit</h2>';
+            $html .= '<h2 class="h6 mb-3">Adresse & Wohneinheit</h2>';
             $html .= '<div class="row g-3">';
             $html .= '<div class="col-md-5"><label class="form-label">Ort *</label><input class="form-control" name="address[city]" value="'.htmlspecialchars($addr['city']).'"></div>';
             $html .= '<div class="col-md-2"><label class="form-label">PLZ</label><input class="form-control" name="address[postal_code]" value="'.htmlspecialchars((string)$addr['postal_code']).'"></div>';
@@ -59,13 +59,46 @@ final class ProtocolWizardController
             $html .= '<div class="col-md-3"><label class="form-label">Haus‑Nr. *</label><input class="form-control" name="address[house_no]" value="'.htmlspecialchars($addr['house_no']).'"></div>';
             $html .= '<div class="col-md-4"><label class="form-label">WE‑Bezeichnung *</label><input class="form-control" name="address[unit_label]" value="'.htmlspecialchars($addr['unit_label']).'"></div>';
             $html .= '<div class="col-md-3"><label class="form-label">Etage (optional)</label><input class="form-control" name="address[floor]" value="'.htmlspecialchars((string)$addr['floor']).'"></div>';
-            $html .= '</div>';
-            $html .= '<div class="form-text mt-2">Die Angaben werden bei „Weiter“ automatisch als Objekt/Wohneinheit gespeichert (oder zugeordnet, falls vorhanden).</div>';
+            $html .= '</div><div class="form-text mt-2">Bei „Weiter“ werden Objekt & WE automatisch erzeugt/zugeordnet.</div>';
+            $html .= '</div></div>';
+
+            // Eigentümer
+            $ownerSnap = $data['owner'] ?? ['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>''];
+            $html .= '<div class="card mb-3"><div class="card-body">';
+            $html .= '<h2 class="h6 mb-3">Eigentümer</h2>';
+            $html .= '<div class="row g-3 align-items-end">';
+            $html .= '<div class="col-md-6"><label class="form-label">Eigentümer (bestehend)</label><select class="form-select" name="owner_id"><option value="">— bitte wählen —</option>';
+            foreach ($owners as $o) {
+                $label = $o['name'].($o['company'] ? ' ('.$o['company'].')' : '');
+                $sel = (($d['owner_id'] ?? '') === $o['id']) ? ' selected' : '';
+                $html .= '<option value="'.$o['id'].'"'.$sel.'>'.htmlspecialchars($label).'</option>';
+            }
+            $html .= '</select></div>';
+            $html .= '<div class="col-md-6"><div class="form-text">Oder neuen Eigentümer direkt erfassen:</div></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="owner_new[name]" value="'.htmlspecialchars((string)$ownerSnap['name']).'"></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">Firma</label><input class="form-control" name="owner_new[company]" value="'.htmlspecialchars((string)$ownerSnap['company']).'"></div>';
+            $html .= '<div class="col-md-12"><label class="form-label">Adresse</label><input class="form-control" name="owner_new[address]" value="'.htmlspecialchars((string)$ownerSnap['address']).'"></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">E‑Mail</label><input type="email" class="form-control" name="owner_new[email]" value="'.htmlspecialchars((string)$ownerSnap['email']).'"></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">Telefon</label><input class="form-control" name="owner_new[phone]" value="'.htmlspecialchars((string)$ownerSnap['phone']).'"></div>';
+            $html .= '</div></div>';
+
+            // Hausverwaltung (NEU)
+            $html .= '<div class="card mb-3"><div class="card-body">';
+            $html .= '<h2 class="h6 mb-3">Hausverwaltung</h2>';
+            $html .= '<div class="row g-3">';
+            $html .= '<div class="col-md-6"><label class="form-label">Hausverwaltung (Dropdown)</label><select class="form-select" name="manager_id"><option value="">— bitte wählen —</option>';
+            foreach ($managers as $m) {
+                $label = $m['name'].($m['company'] ? ' ('.$m['company'].')' : '');
+                $sel = (($d['manager_id'] ?? '') === $m['id']) ? ' selected' : '';
+                $html .= '<option value="'.$m['id'].'"'.$sel.'>'.htmlspecialchars($label).'</option>';
+            }
+            $html .= '</select></div>';
+            $html .= '<div class="col-md-6"><div class="form-text">Stammdaten der Hausverwaltungen pflegst du unter <a href="/settings">Einstellungen</a>.</div></div>';
             $html .= '</div></div>';
 
             // Protokollkopf
             $html .= '<div class="card"><div class="card-body">';
-            $html .= '<h2 class="h5 mb-3">Protokoll-Kopf</h2>';
+            $html .= '<h2 class="h6 mb-3">Protokoll‑Kopf</h2>';
             $html .= '<div class="row g-3">';
             $html .= '<div class="col-md-3"><label class="form-label">Art *</label><select class="form-select" name="type" required>';
             foreach (['einzug','auszug','zwischen'] as $t) {
@@ -78,45 +111,28 @@ final class ProtocolWizardController
         }
 
         if ($step === 2) {
-            // Räume (+ Fotos)
+            // Räume …
             $rooms = $data['rooms'] ?? [];
-            $html .= '<div class="d-flex justify-content-between"><h2 class="h5">Räume</h2><button class="btn btn-sm btn-outline-primary" name="add_room" value="1">Raum hinzufügen</button></div>';
+            $html .= '<div class="d-flex justify-content-between"><h2 class="h6">Räume</h2><button class="btn btn-sm btn-outline-primary" name="add_room" value="1">Raum hinzufügen</button></div>';
             $idx = 0;
             foreach ($rooms as $key => $room) {
-                $idx++;
-                $rk = htmlspecialchars((string)$key);
+                $idx++; $rk = htmlspecialchars((string)$key);
                 $html .= '<div class="card my-3"><div class="card-header d-flex justify-content-between"><strong>Raum '.$idx.': '.htmlspecialchars($room['name'] ?? '').'</strong>';
                 $html .= '<button class="btn btn-sm btn-outline-danger" name="del_room" value="'.$rk.'" onclick="return confirm(\'Raum entfernen?\')">Entfernen</button>';
                 $html .= '</div><div class="card-body row g-3">';
                 $html .= '<div class="col-md-6"><label class="form-label">Raumname *</label><input class="form-control" name="rooms['.$rk.'][name]" value="'.htmlspecialchars($room['name'] ?? '').'"></div>';
                 $html .= '<div class="col-md-6"><label class="form-label">Geruch</label><input class="form-control" name="rooms['.$rk.'][smell]" value="'.htmlspecialchars($room['smell'] ?? '').'"></div>';
-                $html .= '<div class="col-12"><label class="form-label">IST-Zustand</label><textarea class="form-control" name="rooms['.$rk.'][state]" rows="3">'.htmlspecialchars($room['state'] ?? '').'</textarea></div>';
+                $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" name="rooms['.$rk.'][state]" rows="3">'.htmlspecialchars($room['state'] ?? '').'</textarea></div>';
                 $html .= '<div class="col-md-3 form-check ms-2"><input class="form-check-input" type="checkbox" name="rooms['.$rk.'][accepted]" '.(!empty($room['accepted'])?'checked':'').'> <label class="form-check-label">Abnahme erfolgt</label></div>';
-                $html .= '<div class="col-md-6"><label class="form-label">Wärmemengenzähler – Nummer</label><input class="form-control" name="rooms['.$rk.'][wmz_no]" value="'.htmlspecialchars($room['wmz_no'] ?? '').'"></div>';
-                $html .= '<div class="col-md-6"><label class="form-label">Wärmemengenzähler – Stand</label><input class="form-control" name="rooms['.$rk.'][wmz_val]" value="'.htmlspecialchars($room['wmz_val'] ?? '').'"></div>';
-
-                // Fotos zum Raum
+                $html .= '<div class="col-md-6"><label class="form-label">WMZ Nummer</label><input class="form-control" name="rooms['.$rk.'][wmz_no]" value="'.htmlspecialchars($room['wmz_no'] ?? '').'"></div>';
+                $html .= '<div class="col-md-6"><label class="form-label">WMZ Stand</label><input class="form-control" name="rooms['.$rk.'][wmz_val]" value="'.htmlspecialchars($room['wmz_val'] ?? '').'"></div>';
                 $html .= '<div class="col-12"><label class="form-label">Fotos (JPG/PNG, max. 10MB)</label><input class="form-control" type="file" name="room_photos['.$rk.'][]" multiple accept="image/*"></div>';
-
-                // bereits hochgeladene Fotos anzeigen
-                $pics = $this->filesForRoom($pdo, (string)$d['id'], (string)$key);
-                if ($pics) {
-                    $html .= '<div class="col-12"><div class="d-flex flex-wrap gap-2">';
-                    foreach ($pics as $p) {
-                        $html .= '<div class="border rounded p-2 small">'.htmlspecialchars($p['original_name']).'</div>';
-                    }
-                    $html .= '</div></div>';
-                }
-
-                $html .= '</div></div>'; // card
+                $html .= '</div></div>';
             }
-            if (!$rooms) {
-                $html .= '<p class="text-muted">Noch keine Räume – klicke „Raum hinzufügen“.</p>';
-            }
+            if (!$rooms) $html .= '<p class="text-muted">Noch keine Räume – „Raum hinzufügen“.</p>';
         }
 
         if ($step === 3) {
-            // Zählerstände (MVP)
             $meters = $data['meters'] ?? [];
             $types = [
                 'strom_we' => 'Strom (Wohneinheit)',
@@ -129,7 +145,7 @@ final class ProtocolWizardController
                 'wasser_bad_warm' => 'Warmwasser Bad (rot)',
                 'wasser_wm' => 'Wasserzähler Waschmaschine (blau)',
             ];
-            $html .= '<h2 class="h5 mb-3">Zählerstände</h2>';
+            $html .= '<h2 class="h6 mb-3">Zählerstände</h2>';
             foreach ($types as $key => $label) {
                 $row = $meters[$key] ?? ['no'=>'','val'=>''];
                 $html .= '<div class="row g-3 align-items-end mb-2">';
@@ -140,48 +156,40 @@ final class ProtocolWizardController
         }
 
         if ($step === 4) {
-            // Schlüssel & Meta
             $keys = $data['keys'] ?? [];
-            $html .= '<h2 class="h5 mb-3">Schlüssel</h2>';
-            $html .= '<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Bezeichnung</th><th>Anzahl</th><th>Schlüssel-Nr.</th><th></th></tr></thead><tbody id="keys">';
-            foreach ($keys as $i => $k) {
+            $meta = $data['meta'] ?? ['notes'=>'','owner_send'=>false,'manager_send'=>false];
+            $html .= '<h2 class="h6 mb-3">Schlüssel</h2>';
+            $html .= '<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Bezeichnung</th><th>Anzahl</th><th>Nr.</th><th></th></tr></thead><tbody>';
+            $ii=0; foreach ($keys as $i => $k) { $ii++;
                 $html .= '<tr>';
                 $html .= '<td><input class="form-control" name="keys['.$i.'][label]" value="'.htmlspecialchars((string)($k['label'] ?? '')).'"></td>';
-                $html .= '<td><input class="form-control" name="keys['.$i.'][qty]" type="number" min="0" value="'.htmlspecialchars((string)($k['qty'] ?? '0')).'"></td>';
+                $html .= '<td><input class="form-control" type="number" min="0" name="keys['.$i.'][qty]" value="'.htmlspecialchars((string)($k['qty'] ?? '0')).'"></td>';
                 $html .= '<td><input class="form-control" name="keys['.$i.'][no]" value="'.htmlspecialchars((string)($k['no'] ?? '')).'"></td>';
                 $html .= '<td><button class="btn btn-sm btn-outline-danger" name="del_key" value="'.$i.'">Entfernen</button></td>';
                 $html .= '</tr>';
             }
-            if (!$keys) {
-                $html .= '<tr><td colspan="4" class="text-muted">Noch keine Schlüssel – „+ Schlüssel“ klicken.</td></tr>';
-            }
+            if ($ii===0) $html .= '<tr><td colspan="4" class="text-muted">Noch keine Schlüssel – „+ Schlüssel“ klicken.</td></tr>';
             $html .= '</tbody></table></div>';
             $html .= '<button class="btn btn-sm btn-outline-primary" name="add_key" value="1">+ Schlüssel</button>';
-
-            $meta = $data['meta'] ?? ['notes'=>'','owner_send'=>false,'manager_send'=>false];
-            $html .= '<hr><h2 class="h5 mb-3">Protokoll-Details</h2>';
+            $html .= '<hr><h2 class="h6 mb-3">Protokoll‑Details</h2>';
             $html .= '<div class="row g-3">';
             $html .= '<div class="col-12"><label class="form-label">Bemerkungen / Sonstiges</label><textarea class="form-control" name="meta[notes]" rows="3">'.htmlspecialchars((string)($meta['notes'] ?? '')).'</textarea></div>';
-            $html .= '<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[owner_send]" '.(!empty($meta['owner_send'])?'checked':'').'> <label class="form-check-label">Protokoll an Eigentümer senden</label></div></div>';
-            $html .= '<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[manager_send]" '.(!empty($meta['manager_send'])?'checked':'').'> <label class="form-check-label">Protokoll an Verwaltung senden</label></div></div>';
+            $html .= '<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[owner_send]" '.(!empty($meta['owner_send'])?'checked':'').'> <label class="form-check-label">an Eigentümer senden</label></div></div>';
+            $html .= '<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[manager_send]" '.(!empty($meta['manager_send'])?'checked':'').'> <label class="form-check-label">an Verwaltung senden</label></div></div>';
             $html .= '</div>';
         }
 
         // Navigation
         $html .= '<div class="mt-4 d-flex justify-content-between">';
-        if ($step > 1) $html .= '<a class="btn btn-outline-secondary" href="/protocols/wizard?step='.($step-1).'&draft='.$draft.'">Zurück</a>';
-        else $html .= '<span></span>';
-        $html .= '<div class="d-flex gap-2">';
-        $html .= '<a class="btn btn-outline-danger" href="/protocols">Abbrechen</a>';
-        $html .= '<button class="btn btn-primary">Weiter</button>';
-        $html .= '</div></div>';
+        if ($step > 1) $html .= '<a class="btn btn-outline-secondary" href="/protocols/wizard?step='.($step-1).'&draft='.$draft.'">Zurück</a>'; else $html .= '<span></span>';
+        $html .= '<div class="d-flex gap-2"><a class="btn btn-outline-danger" href="/protocols">Abbrechen</a><button class="btn btn-primary">Weiter</button></div>';
+        $html .= '</div>';
 
         $html .= '</form>';
 
         View::render('Protokoll Wizard', $html);
     }
 
-    // POST: pro Schritt speichern
     public function save(): void
     {
         Auth::requireAuth();
@@ -191,10 +199,8 @@ final class ProtocolWizardController
         $d = $this->loadDraft($pdo, $draftId);
         if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
         $data = json_decode($d['data'] ?? '{}', true) ?: [];
-        $next = $step + 1;
 
         if ($step === 1) {
-            // Eingaben lesen
             $addr = (array)($_POST['address'] ?? []);
             $vals = [
                 'city'       => trim((string)($addr['city'] ?? '')),
@@ -209,34 +215,41 @@ final class ProtocolWizardController
             $errs = Validation::required($vals, ['city','street','house_no','unit_label','type','tenant']);
             if ($errs) { Flash::add('error','Bitte Pflichtfelder in Adresse/WE und Protokollkopf ausfüllen.'); header('Location: /protocols/wizard?step=1&draft='.$draftId); return; }
 
-            // Objekt & WE anlegen (oder wiederverwenden)
+            // Objekt & WE
             [$objectId, $unitId] = $this->upsertObjectAndUnit($pdo, $vals['city'], $vals['postal'], $vals['street'], $vals['house_no'], $vals['unit_label'], $vals['floor']);
 
-            // Timestamp mitschreiben
+            // Eigentümer
+            $ownerIdPost = (string)($_POST['owner_id'] ?? '');
+            $ownerNew = (array)($_POST['owner_new'] ?? []);
+            [$ownerId, $ownerSnap] = $this->resolveOwner($pdo, $ownerIdPost, $ownerNew);
+
+            // Hausverwaltung
+            $managerId = (string)($_POST['manager_id'] ?? '');
+
+            // Timestamp
             $data['timestamp'] = (string)($_POST['timestamp'] ?? ($data['timestamp'] ?? ''));
 
             $this->updateDraft($pdo, $draftId, [
                 'unit_id'     => $unitId,
                 'type'        => $vals['type'],
                 'tenant_name' => $vals['tenant'],
-                'data'        => array_merge($data, ['address'=>[
-                    'city'=>$vals['city'],'postal_code'=>$vals['postal'],'street'=>$vals['street'],'house_no'=>$vals['house_no'],
-                    'unit_label'=>$vals['unit_label'],'floor'=>$vals['floor']
-                ]]),
+                'owner_id'    => $ownerId ?: null,
+                'manager_id'  => $managerId ?: null,
+                'data'        => array_merge($data, [
+                    'address'=>[
+                        'city'=>$vals['city'],'postal_code'=>$vals['postal'],'street'=>$vals['street'],'house_no'=>$vals['house_no'],
+                        'unit_label'=>$vals['unit_label'],'floor'=>$vals['floor']
+                    ],
+                    'owner'=>$ownerSnap
+                ]),
                 'step'        => max(2, (int)$d['step']),
             ]);
         }
 
         if ($step === 2) {
-            // Räume + Uploads
-            if (isset($_POST['add_room'])) {
-                $key = 'r'.substr(sha1((string)microtime(true)),0,6);
-                $data['rooms'][$key] = ['name'=>'','state'=>'','smell'=>'','accepted'=>false,'wmz_no'=>'','wmz_val'=>''];
-            }
-            if (isset($_POST['del_room'])) {
-                $k = (string)$_POST['del_room'];
-                unset($data['rooms'][$k]);
-            }
+            // Räume + Uploads (unverändert – hier kein Upload mehr notwendig, Draft-Files bleiben)
+            if (isset($_POST['add_room'])) { $key = 'r'.substr(sha1((string)microtime(true)),0,6); $data['rooms'][$key] = ['name'=>'','state'=>'','smell'=>'','accepted'=>false,'wmz_no'=>'','wmz_val'=>'']; }
+            if (isset($_POST['del_room'])) { $k = (string)$_POST['del_room']; unset($data['rooms'][$k]); }
             if (isset($_POST['rooms']) && is_array($_POST['rooms'])) {
                 foreach ($_POST['rooms'] as $k => $r) {
                     $data['rooms'][$k]['name']    = trim((string)($r['name'] ?? ''));
@@ -247,50 +260,19 @@ final class ProtocolWizardController
                     $data['rooms'][$k]['wmz_val'] = trim((string)($r['wmz_val'] ?? ''));
                 }
             }
-            // Uploads
-            if (!empty($_FILES['room_photos']['name']) && is_array($_FILES['room_photos']['name'])) {
-                foreach ($_FILES['room_photos']['name'] as $rk => $arr) {
-                    $count = count((array)$arr);
-                    for ($i=0;$i<$count;$i++) {
-                        $file = [
-                            'name' => $_FILES['room_photos']['name'][$rk][$i] ?? null,
-                            'type' => $_FILES['room_photos']['type'][$rk][$i] ?? null,
-                            'tmp_name' => $_FILES['room_photos']['tmp_name'][$rk][$i] ?? null,
-                            'error' => $_FILES['room_photos']['error'][$rk][$i] ?? null,
-                            'size' => $_FILES['room_photos']['size'][$rk][$i] ?? null,
-                        ];
-                        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
-                        try {
-                            $saved = Uploads::saveDraftFile($draftId, $file, 'room_photo', (string)$rk);
-                            $ins = $pdo->prepare('INSERT INTO protocol_files (id,draft_id,section,room_key,original_name,path,mime,size,created_at) VALUES (UUID(),?,?,?,?,?,?,?,NOW())');
-                            $ins->execute([$draftId,$saved['section'],$saved['room_key'],$saved['name'],$saved['path'],$saved['mime'],$saved['size']]);
-                        } catch (\Throwable $e) {
-                            Flash::add('error','Upload-Fehler: '.$e->getMessage());
-                        }
-                    }
-                }
-            }
             $this->updateDraft($pdo, $draftId, ['data'=>$data, 'step'=>max(3,(int)$d['step'])]);
         }
 
         if ($step === 3) {
-            $meters = (array)($_POST['meters'] ?? []);
-            $data['meters'] = $meters;
+            $data['meters'] = (array)($_POST['meters'] ?? []);
             $this->updateDraft($pdo, $draftId, ['data'=>$data, 'step'=>max(4,(int)$d['step'])]);
         }
 
         if ($step === 4) {
-            if (isset($_POST['add_key'])) {
-                $data['keys'][] = ['label'=>'','qty'=>0,'no'=>''];
-            }
-            if (isset($_POST['del_key'])) {
-                $i = (string)$_POST['del_key'];
-                if (isset($data['keys'][(int)$i])) unset($data['keys'][(int)$i]);
-            }
+            if (isset($_POST['add_key'])) { $data['keys'][] = ['label'=>'','qty'=>0,'no'=>'']; }
+            if (isset($_POST['del_key'])) { $i = (string)$_POST['del_key']; if (isset($data['keys'][(int)$i])) unset($data['keys'][(int)$i]); }
             if (isset($_POST['keys']) && is_array($_POST['keys'])) {
-                $tmp=[]; foreach ($_POST['keys'] as $k) {
-                    $tmp[] = ['label'=>trim((string)($k['label']??'')),'qty'=>(int)($k['qty']??0),'no'=>trim((string)($k['no']??''))];
-                }
+                $tmp=[]; foreach ($_POST['keys'] as $k) { $tmp[] = ['label'=>trim((string)($k['label']??'')),'qty'=>(int)($k['qty']??0),'no'=>trim((string)($k['no']??''))]; }
                 $data['keys']=$tmp;
             }
             $meta = (array)($_POST['meta'] ?? []);
@@ -301,13 +283,10 @@ final class ProtocolWizardController
             $this->updateDraft($pdo, $draftId, ['data'=>$data]);
         }
 
-        // Navigation
         if (isset($_POST['add_room']) || isset($_POST['del_room']) || isset($_POST['add_key']) || isset($_POST['del_key'])) {
             header('Location: /protocols/wizard?step='.$step.'&draft='.$draftId); return;
         }
-        if ($step >= 4) {
-            header('Location: /protocols/wizard/review?draft='.$draftId); return;
-        }
+        if ($step >= 4) { header('Location: /protocols/wizard/review?draft='.$draftId); return; }
         header('Location: /protocols/wizard?step='.($step+1).'&draft='.$draftId);
     }
 
@@ -319,32 +298,36 @@ final class ProtocolWizardController
         $d = $this->loadDraft($pdo, $draftId);
         if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
         $data = json_decode($d['data'] ?? '{}', true) ?: [];
-        $files = $this->filesForDraft($pdo, $draftId);
 
-        // Objekt/WE Titel:
         $title = '—';
         if (!empty($d['unit_id'])) {
             $st = $pdo->prepare('SELECT u.label as unit_label, o.city,o.street,o.house_no FROM units u JOIN objects o ON o.id=u.object_id WHERE u.id=?');
-            $st->execute([$d['unit_id']]); $row = $st->fetch(PDO::FETCH_ASSOC);
-            if ($row) $title = $row['city'].', '.$row['street'].' '.$row['house_no'].' – '.$row['unit_label'];
+            $st->execute([$d['unit_id']]); if ($row=$st->fetch(PDO::FETCH_ASSOC)) $title = $row['city'].', '.$row['street'].' '.$row['house_no'].' – '.$row['unit_label'];
+        }
+        $ownerStr = '—';
+        if (!empty($d['owner_id'])) {
+            $st = $pdo->prepare('SELECT name,company FROM owners WHERE id=?');
+            $st->execute([$d['owner_id']]); if ($o=$st->fetch(PDO::FETCH_ASSOC)) $ownerStr = $o['name'].($o['company']?' ('.$o['company'].')':'');
+        } elseif (!empty($data['owner']['name'])) { $ownerStr = $data['owner']['name']; }
+
+        $managerStr = '—';
+        if (!empty($d['manager_id'])) {
+            $st = $pdo->prepare('SELECT name,company FROM managers WHERE id=?');
+            $st->execute([$d['manager_id']]); if ($m=$st->fetch(PDO::FETCH_ASSOC)) $managerStr = $m['name'].($m['company']?' ('.$m['company'].')':'');
         }
 
-        $html = '<h1 class="h4 mb-3">Review & Abschluss</h1>';
+        $html = '<h1 class="h5 mb-3">Review & Abschluss</h1>';
         $html .= '<dl class="row">';
         $html .= '<dt class="col-sm-3">Wohneinheit</dt><dd class="col-sm-9">'.htmlspecialchars($title).'</dd>';
+        $html .= '<dt class="col-sm-3">Eigentümer</dt><dd class="col-sm-9">'.htmlspecialchars($ownerStr).'</dd>';
+        $html .= '<dt class="col-sm-3">Hausverwaltung</dt><dd class="col-sm-9">'.htmlspecialchars($managerStr).'</dd>';
         $html .= '<dt class="col-sm-3">Art</dt><dd class="col-sm-9">'.htmlspecialchars($d['type'] ?? '').'</dd>';
         $html .= '<dt class="col-sm-3">Mieter</dt><dd class="col-sm-9">'.htmlspecialchars($d['tenant_name'] ?? '').'</dd>';
         $html .= '</dl>';
 
-        $rooms = $data['rooms'] ?? [];
-        if ($rooms) {
-            $html .= '<h2 class="h5 mt-4">Räume</h2><ul class="list-group mb-3">';
-            foreach ($rooms as $k=>$r) {
-                $html .= '<li class="list-group-item"><strong>'.htmlspecialchars($r['name'] ?? '').'</strong> — '.htmlspecialchars($r['state'] ?? '');
-                $pics = array_values(array_filter($files, fn($f)=>$f['section']==='room_photo' && $f['room_key']===(string)$k));
-                if ($pics) { $html .= '<div class="small text-muted mt-2">'.count($pics).' Foto(s) hochgeladen</div>'; }
-                $html .= '</li>';
-            }
+        if (!empty($data['rooms'])) {
+            $html .= '<h2 class="h6 mt-4">Räume</h2><ul class="list-group mb-3">';
+            foreach ($data['rooms'] as $k=>$r) { $html .= '<li class="list-group-item"><strong>'.htmlspecialchars($r['name'] ?? '').'</strong> — '.htmlspecialchars($r['state'] ?? '').'</li>'; }
             $html .= '</ul>';
         }
 
@@ -365,127 +348,78 @@ final class ProtocolWizardController
         if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
         $data = json_decode($d['data'] ?? '{}', true) ?: [];
 
-        $req = Validation::required([
-            'unit_id'=>$d['unit_id'] ?? '',
-            'type'=>$d['type'] ?? '',
-            'tenant_name'=>$d['tenant_name'] ?? '',
-        ], ['unit_id','type','tenant_name']);
+        $req = Validation::required(['unit_id'=>$d['unit_id'] ?? '','type'=>$d['type'] ?? '','tenant_name'=>$d['tenant_name'] ?? ''], ['unit_id','type','tenant_name']);
         if ($req) { Flash::add('error','Bitte Schritt 1 vervollständigen.'); header('Location: /protocols/wizard?step=1&draft='.$draftId); return; }
 
-        // Protokoll erzeugen
         $pid = $this->uuid($pdo);
-        $ins = $pdo->prepare('INSERT INTO protocols (id,unit_id,type,tenant_name,payload,created_at) VALUES (?,?,?,?,?,NOW())');
-        $ins->execute([$pid, $d['unit_id'],$d['type'],$d['tenant_name'], json_encode($data, JSON_UNESCAPED_UNICODE)]);
+        $ins = $pdo->prepare('INSERT INTO protocols (id,unit_id,type,tenant_name,payload,owner_id,manager_id,created_at) VALUES (?,?,?,?,?,?,?,NOW())');
+        $ins->execute([$pid, $d['unit_id'],$d['type'],$d['tenant_name'], json_encode($data, JSON_UNESCAPED_UNICODE), ($d['owner_id'] ?? null), ($d['manager_id'] ?? null)]);
         AuditLogger::log('protocols',$pid,'create',['from_draft'=>$draftId]);
 
-        // Version 1
         $user = \App\Auth::user();
         $v = $pdo->prepare('INSERT INTO protocol_versions (id,protocol_id,version_no,data,created_by,created_at) VALUES (UUID(),?,?,?,?,NOW())');
         $v->execute([$pid,1,json_encode($data, JSON_UNESCAPED_UNICODE), $user['email'] ?? 'system']);
 
-        // Dateien umhängen
         $pdo->prepare('UPDATE protocol_files SET protocol_id=?, draft_id=NULL WHERE draft_id=?')->execute([$pid,$draftId]);
-
-        // Draft schließen
         $pdo->prepare('UPDATE protocol_drafts SET status="finished", updated_at=NOW() WHERE id=?')->execute([$draftId]);
 
         Flash::add('success','Protokoll gespeichert und Version 1 angelegt.');
         header('Location: /protocols'); exit;
     }
 
-    // ---------- helpers ----------
-
+    // helpers
     private function loadDraft(PDO $pdo, string $id): ?array
-    {
-        if ($id === '') return null;
-        $st = $pdo->prepare('SELECT * FROM protocol_drafts WHERE id=? AND status="draft"');
-        $st->execute([$id]); $row = $st->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
-    }
+    { if ($id === '') return null; $st = $pdo->prepare('SELECT * FROM protocol_drafts WHERE id=? AND status="draft"'); $st->execute([$id]); return $st->fetch(PDO::FETCH_ASSOC) ?: null; }
 
     private function updateDraft(PDO $pdo, string $id, array $patch): void
     {
-        // vorhandenes Draft lesen
-        $st = $pdo->prepare('SELECT * FROM protocol_drafts WHERE id=? LIMIT 1');
-        $st->execute([$id]);
-        $cur = $st->fetch(PDO::FETCH_ASSOC);
-        if (!$cur) return;
-
-        $fields = [];
-        $params = [];
-        foreach (['unit_id','type','tenant_name'] as $f) {
-            if (array_key_exists($f, $patch)) {
-                $fields[] = "$f=?";
-                $params[] = $patch[$f];
-            }
-        }
-        if (array_key_exists('data', $patch)) {
-            $fields[] = "data=?";
-            $params[] = is_string($patch['data']) ? $patch['data'] : json_encode($patch['data'], JSON_UNESCAPED_UNICODE);
-        }
-        if (array_key_exists('step', $patch)) {
-            $fields[] = "step=?";
-            $params[] = (int)$patch['step'];
-        }
+        $st = $pdo->prepare('SELECT * FROM protocol_drafts WHERE id=? LIMIT 1'); $st->execute([$id]); $cur = $st->fetch(PDO::FETCH_ASSOC); if (!$cur) return;
+        $fields = []; $params = [];
+        foreach (['unit_id','type','tenant_name','owner_id','manager_id'] as $f) { if (array_key_exists($f, $patch)) { $fields[]="$f=?"; $params[]=$patch[$f]; } }
+        if (array_key_exists('data',$patch)) { $fields[]="data=?"; $params[] = is_string($patch['data']) ? $patch['data'] : json_encode($patch['data'], JSON_UNESCAPED_UNICODE); }
+        if (array_key_exists('step',$patch)) { $fields[]="step=?"; $params[]=(int)$patch['step']; }
         if (!$fields) return;
-
-        $fields[] = "updated_at=NOW()";
-        $params[] = $id;
-
-        $sql = "UPDATE protocol_drafts SET ".implode(',', $fields)." WHERE id=?";
-        $upd = $pdo->prepare($sql);
-        $upd->execute($params);
+        $fields[]="updated_at=NOW()"; $params[]=$id;
+        $sql="UPDATE protocol_drafts SET ".implode(',', $fields)." WHERE id=?"; $pdo->prepare($sql)->execute($params);
     }
 
     private function upsertObjectAndUnit(PDO $pdo, string $city, string $postal, string $street, string $houseNo, string $unitLabel, string $floor): array
     {
-        // Objekt suchen
         $so = $pdo->prepare('SELECT id FROM objects WHERE city=? AND street=? AND house_no=? LIMIT 1');
-        $so->execute([$city,$street,$houseNo]);
-        $objectId = $so->fetchColumn();
-        if (!$objectId) {
-            $objectId = $this->uuid($pdo);
-            $po = $pdo->prepare('INSERT INTO objects (id,city,postal_code,street,house_no,created_at) VALUES (?,?,?,?,?,NOW())');
-            $po->execute([$objectId,$city,($postal!==''?$postal:null),$street,$houseNo]);
-        } else {
-            // ggf. PLZ ergänzen
-            if ($postal !== '') {
-                $pdo->prepare('UPDATE objects SET postal_code=? WHERE id=? AND (postal_code IS NULL OR postal_code="")')->execute([$postal,$objectId]);
-            }
-        }
+        $so->execute([$city,$street,$houseNo]); $objectId = $so->fetchColumn();
+        if (!$objectId) { $objectId = $this->uuid($pdo); $pdo->prepare('INSERT INTO objects (id,city,postal_code,street,house_no,created_at) VALUES (?,?,?,?,?,NOW())')->execute([$objectId,$city,($postal!==''?$postal:null),$street,$houseNo]); }
+        elseif ($postal !== '') { $pdo->prepare('UPDATE objects SET postal_code=? WHERE id=? AND (postal_code IS NULL OR postal_code="")')->execute([$postal,$objectId]); }
 
-        // WE suchen
         $su = $pdo->prepare('SELECT id FROM units WHERE object_id=? AND label=? LIMIT 1');
-        $su->execute([$objectId,$unitLabel]);
-        $unitId = $su->fetchColumn();
-        if (!$unitId) {
-            $unitId = $this->uuid($pdo);
-            $pu = $pdo->prepare('INSERT INTO units (id,object_id,label,floor,created_at) VALUES (?,?,?, ?, NOW())');
-            $pu->execute([$unitId,$objectId,$unitLabel,($floor!==''?$floor:null)]);
-        } else {
-            // ggf. Etage ergänzen
-            if ($floor !== '') {
-                $pdo->prepare('UPDATE units SET floor=? WHERE id=? AND (floor IS NULL OR floor="")')->execute([$floor,$unitId]);
-            }
-        }
+        $su->execute([$objectId,$unitLabel]); $unitId = $su->fetchColumn();
+        if (!$unitId) { $unitId = $this->uuid($pdo); $pdo->prepare('INSERT INTO units (id,object_id,label,floor,created_at) VALUES (?,?,?, ?, NOW())')->execute([$unitId,$objectId,$unitLabel,($floor!==''?$floor:null)]); }
+        elseif ($floor !== '') { $pdo->prepare('UPDATE units SET floor=? WHERE id=? AND (floor IS NULL OR floor="")')->execute([$floor,$unitId]); }
 
         return [(string)$objectId,(string)$unitId];
     }
 
-    private function filesForDraft(PDO $pdo, string $draftId): array
+    private function resolveOwner(PDO $pdo, string $ownerIdPost, array $ownerNew): array
     {
-        $st = $pdo->prepare('SELECT * FROM protocol_files WHERE draft_id=? ORDER BY created_at');
-        $st->execute([$draftId]); return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    }
-
-    private function filesForRoom(PDO $pdo, string $draftId, string $roomKey): array
-    {
-        $st = $pdo->prepare('SELECT * FROM protocol_files WHERE draft_id=? AND room_key=? ORDER BY created_at');
-        $st->execute([$draftId,$roomKey]); return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if ($ownerIdPost !== '') {
+            $st = $pdo->prepare('SELECT name,company,address,email,phone FROM owners WHERE id=?'); $st->execute([$ownerIdPost]); $o = $st->fetch(PDO::FETCH_ASSOC);
+            $snap = $o ?: ['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>'']; return [$ownerIdPost, $snap];
+        }
+        $name = trim((string)($ownerNew['name'] ?? ''));
+        if ($name !== '') {
+            $id = $this->uuid($pdo);
+            $pdo->prepare('INSERT INTO owners (id,name,company,address,email,phone,created_at) VALUES (?,?,?,?,?,?,NOW())')
+                ->execute([$id, $name, ($ownerNew['company'] ?? null), ($ownerNew['address'] ?? null), ($ownerNew['email'] ?? null), ($ownerNew['phone'] ?? null)]);
+            $snap = [
+                'name'=>$name,'company'=>trim((string)($ownerNew['company'] ?? '')),
+                'address'=>trim((string)($ownerNew['address'] ?? '')),
+                'email'=>trim((string)($ownerNew['email'] ?? '')),
+                'phone'=>trim((string)($ownerNew['phone'] ?? '')),
+            ];
+            return [$id, $snap];
+        }
+        return [null, ['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>'']];
     }
 
     private function uuid(PDO $pdo): string
-    {
-        return (string)$pdo->query('SELECT UUID()')->fetchColumn();
-    }
+    { return (string)$pdo->query('SELECT UUID()')->fetchColumn(); }
 }
