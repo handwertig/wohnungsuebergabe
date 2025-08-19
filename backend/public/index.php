@@ -82,6 +82,7 @@ switch ($path) {
     case '/protocols/new':
     case '/protocols/edit': Auth::requireAuth(); (new ProtocolsController())->form(); break;
     case '/protocols/save': Auth::requireAuth(); (new ProtocolsController())->save(); break;
+    case '/protocols/export': Auth::requireAuth(); (new ProtocolsController())->export(); break;
     case '/protocols/delete': Auth::requireAuth(); (new ProtocolsController())->delete(); break;
 
     // Protocol Wizard
