@@ -4,6 +4,10 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 if (is_file(__DIR__ . '/../.env')) { Dotenv\Dotenv::createImmutable(dirname(__DIR__))->load(); }
 
+// Sicherheits-Header (hilft bei Safari Edge-Cases)
+header_remove('Content-Type');
+header('Content-Type: text/html; charset=utf-8');
+
 use App\Controllers\HomeController;
 use App\Controllers\AuthController;
 use App\Controllers\DashboardController;
@@ -16,6 +20,8 @@ use App\Controllers\PasswordController;
 use App\Controllers\ProtocolsController;
 use App\Controllers\ProtocolWizardController;
 use App\Controllers\SettingsController;
+use App\Controllers\SignaturesController;
+use App\Controllers\DocusignController;
 use App\Auth;
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
@@ -77,13 +83,13 @@ switch ($path) {
         else { (new PasswordController())->reset(); }
         break;
 
-    // Protocols (Liste & CRUD)
+    // Protocols (Liste, Editor, CSV)
     case '/protocols': Auth::requireAuth(); (new ProtocolsController())->index(); break;
     case '/protocols/new':
     case '/protocols/edit': Auth::requireAuth(); (new ProtocolsController())->form(); break;
     case '/protocols/save': Auth::requireAuth(); (new ProtocolsController())->save(); break;
-    case '/protocols/export': Auth::requireAuth(); (new ProtocolsController())->export(); break;
     case '/protocols/delete': Auth::requireAuth(); (new ProtocolsController())->delete(); break;
+    case '/protocols/export': Auth::requireAuth(); (new ProtocolsController())->export(); break;
 
     // Protocol Wizard
     case '/protocols/wizard/start':  Auth::requireAuth(); (new ProtocolWizardController())->start();  break;
@@ -92,8 +98,21 @@ switch ($path) {
     case '/protocols/wizard/review': Auth::requireAuth(); (new ProtocolWizardController())->review(); break;
     case '/protocols/wizard/finish': Auth::requireAuth(); (new ProtocolWizardController())->finish(); break;
 
-    // Settings
+    // Settings + DocuSign-Settings Save
     case '/settings': Auth::requireAuth(); (new SettingsController())->index(); break;
+    case '/settings/docusign-save': Auth::requireAuth(); (new SettingsController())->saveDocusign(); break;
+
+    // Signatures (on-device capture)
+    case '/signatures': Auth::requireAuth(); (new SignaturesController())->index(); break;
+    case '/signatures/save': Auth::requireAuth(); (new SignaturesController())->save(); break;
+    case '/signatures/manage': Auth::requireAuth(); (new SignaturesController())->manage(); break;
+    case '/signatures/manage-save': Auth::requireAuth(); (new SignaturesController())->manageSave(); break;
+    case '/signatures/add': Auth::requireAuth(); (new SignaturesController())->add(); break;
+    case '/signatures/delete': Auth::requireAuth(); (new SignaturesController())->delete(); break;
+    case '/signatures/remove': Auth::requireAuth(); (new SignaturesController())->remove(); break;
+
+    // DocuSign (Stub)
+    case '/docusign/send': Auth::requireAuth(); (new DocusignController())->send(); break;
 
     default:
         http_response_code(404);
