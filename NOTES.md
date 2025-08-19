@@ -1,9 +1,8 @@
-# NOTES
+# v0.4.0 – Wizard, Accordion-Übersicht, Editor-Tabs
 
-- Initiales Start-Setup erstellt (Docker, PHP-Basis, Routing, DB-Connection).
-- Nächste Schritte:
-  1) Auth (Login/Logout, Rollen)
-  2) Stammdaten (Eigentümer, HV, Objekte, WE)
-  3) Protokoll-CRUD + Versionierung
-  4) PDF-Generator (wkhtmltopdf) + SMTP
-  5) DocuSign-Integration
+- Navigation gestrafft: Protokolle, Neues Protokoll (Wizard), Einstellungen.
+- Wizard mit Drafts & Datei-Uploads, automatisches Anlegen/Zuordnen von Objekt/WE.
+- Protokoll-Übersicht als Accordion (Objekt→WE→Versionen) mit Typ-Badges, Filter & CSV.
+- Editor mit Tabs (Kopf/Räume/Zähler/Schlüssel+Meta), dynamische Felder, HTML5-Validation.
+- Versionierung: Speichern erzeugt vN; Audit-Log & Soft-Delete integriert.
+- Nginx aliasiert /uploads aus backend/storage/uploads.
