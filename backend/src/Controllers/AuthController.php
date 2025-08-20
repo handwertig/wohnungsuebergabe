@@ -41,7 +41,7 @@ final class AuthController {
     
         if ($u && password_verify($pass, $u['password_hash'])) {
             \App\Auth::login($u);
-            header('Location: /dashboard'); exit;
+            header('Location: /protocols'); exit;
         }
     
         // Fehl-Login → zurück mit Query-Flag
