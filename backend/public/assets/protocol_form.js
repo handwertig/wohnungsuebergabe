@@ -5,7 +5,7 @@
   if (roomsWrap && addRoomBtn) {
     addRoomBtn.addEventListener('click', function (e) {
       e.preventDefault();
-      const idx = Date.now();
+      const idx = 'r' + Date.now();
       const tpl = document.getElementById('room-template').innerHTML.replace(/__IDX__/g, idx);
       const div = document.createElement('div');
       div.className = 'card mb-3';

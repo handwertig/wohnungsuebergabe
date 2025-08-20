@@ -5,27 +5,39 @@ namespace App;
 
 final class Uploads
 {
-    public static function ensureStorage(): string
+    private static function ensureStorage(): string
     {
         $base = __DIR__ . '/../storage/uploads';
-        if (!is_dir($base)) {
-            @mkdir($base, 0775, true);
-        }
+        if (!is_dir($base)) { @mkdir($base, 0775, true); }
         return realpath($base) ?: $base;
     }
 
+    /** Speichert Datei zu einem Draft (Wizard) */
     public static function saveDraftFile(string $draftId, array $file, string $section, ?string $roomKey = null): array
     {
         $base = self::ensureStorage();
         $dir  = $base . '/' . $draftId;
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0775, true);
-        }
+        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
+        return self::saveFile($dir, $file, $section, $roomKey);
+    }
+
+    /** Speichert Datei zu einem Protokoll (Editor) */
+    public static function saveProtocolFile(string $protocolId, array $file, string $section, ?string $roomKey = null): array
+    {
+        $base = self::ensureStorage();
+        $dir  = $base . '/' . $protocolId;
+        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
+        return self::saveFile($dir, $file, $section, $roomKey);
+    }
+
+    /** Gemeinsame Low-Level-Speicherlogik */
+    private static function saveFile(string $dir, array $file, string $section, ?string $roomKey): array
+    {
         $name = preg_replace('~[^a-zA-Z0-9._-]+~', '_', $file['name'] ?? 'upload');
         $ts   = date('Ymd_His');
         $dest = $dir . '/' . $ts . '-' . $name;
 
-        if (!is_uploaded_file($file['tmp_name'] ?? '')) {
+        if (!isset($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
             throw new \RuntimeException('Ungültiger Upload.');
         }
         if (($file['size'] ?? 0) > 10 * 1024 * 1024) { // 10MB
@@ -37,12 +49,12 @@ final class Uploads
         }
 
         return [
-            'path' => $dest,
-            'name' => $name,
-            'mime' => mime_content_type($dest) ?: ($file['type'] ?? 'application/octet-stream'),
-            'size' => (int)($file['size'] ?? filesize($dest) ?: 0),
+            'path'    => $dest,
+            'name'    => $name,
+            'mime'    => mime_content_type($dest) ?: ($file['type'] ?? 'application/octet-stream'),
+            'size'    => (int)($file['size'] ?? filesize($dest) ?: 0),
             'section' => $section,
-            'room_key' => $roomKey,
+            'room_key'=> $roomKey,
         ];
     }
 }
