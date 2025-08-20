@@ -1,21 +1,21 @@
-# v0.5.0 – Wizard + Eigentümer/Hausverwaltung, Signaturen, DocuSign-Settings, UI-Polish
+# v0.6.0 – Wizard/Editor Feinschliff, Rechtstexte & PDF, Versand/Status
 
-## Highlights
-- **Wizard Schritt 1**: Eigentümer (Dropdown oder Inline-Neuanlage) & Hausverwaltung (Dropdown). Owner-Snapshot im Payload, `owner_id/manager_id` in Draft/Protokoll.
-- **Signaturen (On-Device)**: Mieter/Eigentümer/Mitzeichner unterschreiben direkt per Touch/Mouse; PNG gespeichert; Status 'signed'. Signer-Verwaltung (Rolle, Reihenfolge, Pflicht).
-- **DocuSign**: Sichtbare Einstellungen (Mode, Account-ID, Base-URL, Client-ID, Secret, Redirect-URI, Webhook-Secret), Versand-Button (Stub) mit Konfig-Prüfung.
-- **Editor (Bestands-Protokolle)**: Tabs (Kopf/Räume/Zähler/Schlüssel+Meta), dynamisches Hinzufügen/Entfernen, HTML5-Validation, Tooltips, Thumbnails vorhandener Raum-Fotos.
-- **Übersicht**: Accordion Objekt→Einheit→Versionen; Typ-Badges; WE-Label als „Einheit <Nr>“; CSV-Export & Filter.
-- **Infra**: /uploads via Nginx alias; neue Indizes für zügige Listenabfragen.
+## Neu
+- Wizard Schritt 1: Reihenfolge fix, Eigentümer (Dropdown + Inline) & Hausverwaltung, Labels (Einzugs-/Auszugs-/Zwischenprotokoll).
+- Editor: Adress-/Kontakt-/Bank-/Einwilligungs-Felder ergänzt, Raum-Foto-Uploads inkl. Thumbnails je Raum.
+- Rechtstexte: versionierbar (Datenschutz, Entsorgung, Marketing) in Einstellungen.
+- PDF-Export (Dompdf): CI-nahes Template, Speicherung je Version, Anzeige/Download.
+- Versand: PDF per SMTP an Eigentümer/Hausverwaltung/Mieter, Versandlog (email_log) + Status-Events (protocol_events).
+- UX: Übersichtsaccordion zeigt „Einheit <Nr>“, Typ-Badges, Login leitet auf /protocols.
 
 ## Migrationen
-- `009_signers.sql` – protocol_signers / protocol_signatures
-- `010_app_settings.sql` – app_settings (persistente Settings)
-- `011_protocols_owner.sql` – owner_id in protocols
-- `012_protocol_drafts_owner.sql` – owner_id in protocol_drafts
-- `013_protocol_manager.sql` – manager_id in protocols/drafts
+- 011/012/013: owner_id/manager_id für protocols & drafts
+- 014: legal_texts (versioniert)
+- 015: pdf_path in protocol_versions
+- 016: protocol_events
+- 017: email_log
 
 ## Hinweise
-- Protokoll-Art intern weiterhin `einzug|auszug|zwischen`; UI-Labels vereinheitlicht.
-- DocuSign: Integration Key/Secret in Admin (Apps & Keys) anlegen, Redirect-URI setzen (z. B. /docusign/callback).
-- Uploads liegen unter `backend/storage/uploads`; via `/uploads/...` ausgeliefert (keine PHP-Ausführung).
+- SMTP in Einstellungen pflegen (Host/Port/Sicherheit/User/Pass/From).
+- Rechtstexte anpassen (neue Versionen bei Änderungen).
+- PDF unter storage/pdfs/<protocol_id>/vN.pdf; Uploads unter storage/uploads.
