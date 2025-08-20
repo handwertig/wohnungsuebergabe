@@ -36,8 +36,8 @@ final class ProtocolWizardController
         if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
         $data = json_decode($d['data'] ?? '{}', true) ?: [];
 
-        // Stammdaten (für Schritt 1)
-        $owners = $pdo->query('SELECT id,name,company FROM owners WHERE deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+        // Stammdaten (Schritt 1)
+        $owners   = $pdo->query('SELECT id,name,company FROM owners WHERE deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
         $managers = $pdo->query('SELECT id,name,company FROM managers ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 
         $html = '<div class="d-flex justify-content-between align-items-center mb-3">';
@@ -48,7 +48,7 @@ final class ProtocolWizardController
         $html .= '<form method="post" action="/protocols/wizard/save?step='.$step.'&draft='.$draft.'" enctype="multipart/form-data">';
 
         if ($step === 1) {
-            // Adresse & WE
+            // 1) Adresse & WE
             $addr = $data['address'] ?? ['city'=>'','postal_code'=>'','street'=>'','house_no'=>'','unit_label'=>'','floor'=>''];
             $html .= '<div class="card mb-3"><div class="card-body">';
             $html .= '<h2 class="h6 mb-3">Adresse & Wohneinheit</h2>';
@@ -62,7 +62,21 @@ final class ProtocolWizardController
             $html .= '</div><div class="form-text mt-2">Bei „Weiter“ werden Objekt & WE automatisch erzeugt/zugeordnet.</div>';
             $html .= '</div></div>';
 
-            // Eigentümer
+            // 2) Protokoll‑Kopf (Label‑Änderung)
+            $html .= '<div class="card mb-3"><div class="card-body">';
+            $html .= '<h2 class="h6 mb-3">Protokoll‑Kopf</h2>';
+            $html .= '<div class="row g-3">';
+            $html .= '<div class="col-md-4"><label class="form-label">Art *</label><select class="form-select" name="type" required>';
+            foreach ([['einzug','Einzugsprotokoll'],['auszug','Auszugsprotokoll'],['zwischen','Zwischenprotokoll']] as $opt) {
+                $val=$opt[0]; $lab=$opt[1]; $sel=(($d['type'] ?? 'einzug')===$val)?' selected':'';
+                $html .= '<option value="'.$val.'"'.$sel.'>'.$lab.'</option>';
+            }
+            $html .= '</select></div>';
+            $html .= '<div class="col-md-5"><label class="form-label">Mietername *</label><input class="form-control" name="tenant_name" required value="'.htmlspecialchars($d['tenant_name'] ?? '').'"></div>';
+            $html .= '<div class="col-md-3"><label class="form-label">Zeitstempel</label><input class="form-control" name="timestamp" type="datetime-local" value="'.htmlspecialchars($data['timestamp'] ?? '').'"></div>';
+            $html .= '</div></div></div>';
+
+            // 3) Eigentümer (Dropdown + Inline)
             $ownerSnap = $data['owner'] ?? ['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>''];
             $html .= '<div class="card mb-3"><div class="card-body">';
             $html .= '<h2 class="h6 mb-3">Eigentümer</h2>';
@@ -80,9 +94,9 @@ final class ProtocolWizardController
             $html .= '<div class="col-md-12"><label class="form-label">Adresse</label><input class="form-control" name="owner_new[address]" value="'.htmlspecialchars((string)$ownerSnap['address']).'"></div>';
             $html .= '<div class="col-md-6"><label class="form-label">E‑Mail</label><input type="email" class="form-control" name="owner_new[email]" value="'.htmlspecialchars((string)$ownerSnap['email']).'"></div>';
             $html .= '<div class="col-md-6"><label class="form-label">Telefon</label><input class="form-control" name="owner_new[phone]" value="'.htmlspecialchars((string)$ownerSnap['phone']).'"></div>';
-            $html .= '</div></div>';
+            $html .= '</div></div></div>';
 
-            // Hausverwaltung (NEU)
+            // 4) Hausverwaltung
             $html .= '<div class="card mb-3"><div class="card-body">';
             $html .= '<h2 class="h6 mb-3">Hausverwaltung</h2>';
             $html .= '<div class="row g-3">';
@@ -93,25 +107,11 @@ final class ProtocolWizardController
                 $html .= '<option value="'.$m['id'].'"'.$sel.'>'.htmlspecialchars($label).'</option>';
             }
             $html .= '</select></div>';
-            $html .= '<div class="col-md-6"><div class="form-text">Stammdaten der Hausverwaltungen pflegst du unter <a href="/settings">Einstellungen</a>.</div></div>';
+            $html .= '<div class="col-md-6"><div class="form-text">Stammdaten unter <a href="/settings">Einstellungen</a> pflegbar.</div></div>';
             $html .= '</div></div>';
-
-            // Protokollkopf
-            $html .= '<div class="card"><div class="card-body">';
-            $html .= '<h2 class="h6 mb-3">Protokoll‑Kopf</h2>';
-            $html .= '<div class="row g-3">';
-            $html .= '<div class="col-md-3"><label class="form-label">Art *</label><select class="form-select" name="type" required>';
-            foreach (['einzug','auszug','zwischen'] as $t) {
-                $html .= '<option value="'.$t.'"'.(($d['type'] ?? 'einzug')===$t?' selected':'').'>'.$t.'</option>';
-            }
-            $html .= '</select></div>';
-            $html .= '<div class="col-md-6"><label class="form-label">Mietername *</label><input class="form-control" name="tenant_name" required value="'.htmlspecialchars($d['tenant_name'] ?? '').'"></div>';
-            $html .= '<div class="col-md-3"><label class="form-label">Zeitstempel</label><input class="form-control" name="timestamp" type="datetime-local" value="'.htmlspecialchars($data['timestamp'] ?? '').'"></div>';
-            $html .= '</div></div></div>';
         }
 
         if ($step === 2) {
-            // Räume …
             $rooms = $data['rooms'] ?? [];
             $html .= '<div class="d-flex justify-content-between"><h2 class="h6">Räume</h2><button class="btn btn-sm btn-outline-primary" name="add_room" value="1">Raum hinzufügen</button></div>';
             $idx = 0;
@@ -157,7 +157,16 @@ final class ProtocolWizardController
 
         if ($step === 4) {
             $keys = $data['keys'] ?? [];
-            $meta = $data['meta'] ?? ['notes'=>'','owner_send'=>false,'manager_send'=>false];
+            $meta = $data['meta'] ?? [
+                'notes'=>'','owner_send'=>false,'manager_send'=>false,
+                'bank'=>['bank'=>'','iban'=>'','holder'=>''],
+                'tenant_contact'=>['email'=>'','phone'=>''],
+                'tenant_new_addr'=>['street'=>'','house_no'=>'','postal_code'=>'','city'=>''],
+                'consents'=>['marketing'=>false,'disposal'=>false],
+                'third_attendee'=>''
+            ];
+
+            // Schlüssel
             $html .= '<h2 class="h6 mb-3">Schlüssel</h2>';
             $html .= '<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Bezeichnung</th><th>Anzahl</th><th>Nr.</th><th></th></tr></thead><tbody>';
             $ii=0; foreach ($keys as $i => $k) { $ii++;
@@ -171,11 +180,40 @@ final class ProtocolWizardController
             if ($ii===0) $html .= '<tr><td colspan="4" class="text-muted">Noch keine Schlüssel – „+ Schlüssel“ klicken.</td></tr>';
             $html .= '</tbody></table></div>';
             $html .= '<button class="btn btn-sm btn-outline-primary" name="add_key" value="1">+ Schlüssel</button>';
-            $html .= '<hr><h2 class="h6 mb-3">Protokoll‑Details</h2>';
+
+            // Bankverbindung / Kontakt / neue Adresse
+            $html .= '<hr><h2 class="h6 mb-3">Weitere Angaben</h2>';
             $html .= '<div class="row g-3">';
+            $html .= '<div class="col-md-4"><label class="form-label">Bank</label><input class="form-control" name="meta[bank][bank]" value="'.htmlspecialchars((string)$meta['bank']['bank']).'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">IBAN</label><input class="form-control" name="meta[bank][iban]" value="'.htmlspecialchars((string)$meta['bank']['iban']).'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">Kontoinhaber</label><input class="form-control" name="meta[bank][holder]" value="'.htmlspecialchars((string)$meta['bank']['holder']).'"></div>';
+
+            $html .= '<div class="col-md-4"><label class="form-label">Mieter E‑Mail</label><input type="email" class="form-control" name="meta[tenant_contact][email]" value="'.htmlspecialchars((string)$meta['tenant_contact']['email']).'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">Mieter Telefon</label><input class="form-control" name="meta[tenant_contact][phone]" value="'.htmlspecialchars((string)$meta['tenant_contact']['phone']).'"></div>';
+
+            $html .= '<div class="col-12"><label class="form-label">Neue Meldeadresse</label></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">Straße</label><input class="form-control" name="meta[tenant_new_addr][street]" value="'.htmlspecialchars((string)$meta['tenant_new_addr']['street']).'"></div>';
+            $html .= '<div class="col-md-2"><label class="form-label">Haus‑Nr.</label><input class="form-control" name="meta[tenant_new_addr][house_no]" value="'.htmlspecialchars((string)$meta['tenant_new_addr']['house_no']).'"></div>';
+            $html .= '<div class="col-md-2"><label class="form-label">PLZ</label><input class="form-control" name="meta[tenant_new_addr][postal_code]" value="'.htmlspecialchars((string)$meta['tenant_new_addr']['postal_code']).'"></div>';
+            $html .= '<div class="col-md-2"><label class="form-label">Ort</label><input class="form-control" name="meta[tenant_new_addr][city]" value="'.htmlspecialchars((string)$meta['tenant_new_addr']['city']).'"></div>';
+
+            // Einwilligungen
+            $html .= '<div class="col-12"><label class="form-label">Einwilligungen</label></div>';
+            $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[consents][marketing]" '.(!empty($meta['consents']['marketing'])?'checked':'').'> <label class="form-check-label">E‑Mail‑Marketing (außerhalb Mietverhältnis)</label></div></div>';
+            $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[consents][disposal]" '.(!empty($meta['consents']['disposal'])?'checked':'').'> <label class="form-check-label">Einverständnis Entsorgung zurückgelassener Gegenstände</label></div></div>';
+
+            // Versand
+            $html .= '<div class="col-12"><label class="form-label">Versand</label></div>';
+            $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[owner_send]" '.(!empty($meta['owner_send'])?'checked':'').'> <label class="form-check-label">an Eigentümer senden</label></div></div>';
+            $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[manager_send]" '.(!empty($meta['manager_send'])?'checked':'').'> <label class="form-check-label">an Verwaltung senden</label></div></div>';
+
+            // Dritte Person & Platzhalter Signaturen
+            $html .= '<div class="col-12"><hr></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">Dritte anwesende Person (optional, Name)</label><input class="form-control" name="meta[third_attendee]" value="'.htmlspecialchars((string)($meta['third_attendee'] ?? '')).'"></div>';
+            $html .= '<div class="col-12"><div class="alert alert-info mt-2">Platzhalter für Unterschriften (Mieter, Eigentümer, optional dritte Person). DocuSign‑Versand folgt hier im nächsten Schritt.</div></div>';
+
+            // Bemerkungen
             $html .= '<div class="col-12"><label class="form-label">Bemerkungen / Sonstiges</label><textarea class="form-control" name="meta[notes]" rows="3">'.htmlspecialchars((string)($meta['notes'] ?? '')).'</textarea></div>';
-            $html .= '<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[owner_send]" '.(!empty($meta['owner_send'])?'checked':'').'> <label class="form-check-label">an Eigentümer senden</label></div></div>';
-            $html .= '<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[manager_send]" '.(!empty($meta['manager_send'])?'checked':'').'> <label class="form-check-label">an Verwaltung senden</label></div></div>';
             $html .= '</div>';
         }
 
@@ -220,7 +258,7 @@ final class ProtocolWizardController
 
             // Eigentümer
             $ownerIdPost = (string)($_POST['owner_id'] ?? '');
-            $ownerNew = (array)($_POST['owner_new'] ?? []);
+            $ownerNew    = (array)($_POST['owner_new'] ?? []);
             [$ownerId, $ownerSnap] = $this->resolveOwner($pdo, $ownerIdPost, $ownerNew);
 
             // Hausverwaltung
@@ -247,7 +285,6 @@ final class ProtocolWizardController
         }
 
         if ($step === 2) {
-            // Räume + Uploads (unverändert – hier kein Upload mehr notwendig, Draft-Files bleiben)
             if (isset($_POST['add_room'])) { $key = 'r'.substr(sha1((string)microtime(true)),0,6); $data['rooms'][$key] = ['name'=>'','state'=>'','smell'=>'','accepted'=>false,'wmz_no'=>'','wmz_val'=>'']; }
             if (isset($_POST['del_room'])) { $k = (string)$_POST['del_room']; unset($data['rooms'][$k]); }
             if (isset($_POST['rooms']) && is_array($_POST['rooms'])) {
@@ -276,9 +313,31 @@ final class ProtocolWizardController
                 $data['keys']=$tmp;
             }
             $meta = (array)($_POST['meta'] ?? []);
-            $meta['owner_send']  = !empty($meta['owner_send']);
-            $meta['manager_send']= !empty($meta['manager_send']);
-            $data['meta']=$meta;
+            $data['meta'] = [
+                'notes' => trim((string)($meta['notes'] ?? '')),
+                'owner_send' => !empty($meta['owner_send']),
+                'manager_send' => !empty($meta['manager_send']),
+                'bank' => [
+                    'bank' => trim((string)($meta['bank']['bank'] ?? '')),
+                    'iban' => trim((string)($meta['bank']['iban'] ?? '')),
+                    'holder' => trim((string)($meta['bank']['holder'] ?? '')),
+                ],
+                'tenant_contact' => [
+                    'email' => trim((string)($meta['tenant_contact']['email'] ?? '')),
+                    'phone' => trim((string)($meta['tenant_contact']['phone'] ?? '')),
+                ],
+                'tenant_new_addr' => [
+                    'street' => trim((string)($meta['tenant_new_addr']['street'] ?? '')),
+                    'house_no' => trim((string)($meta['tenant_new_addr']['house_no'] ?? '')),
+                    'postal_code' => trim((string)($meta['tenant_new_addr']['postal_code'] ?? '')),
+                    'city' => trim((string)($meta['tenant_new_addr']['city'] ?? '')),
+                ],
+                'consents' => [
+                    'marketing' => !empty($meta['consents']['marketing']),
+                    'disposal'  => !empty($meta['consents']['disposal']),
+                ],
+                'third_attendee' => trim((string)($meta['third_attendee'] ?? '')),
+            ];
 
             $this->updateDraft($pdo, $draftId, ['data'=>$data]);
         }
@@ -321,7 +380,7 @@ final class ProtocolWizardController
         $html .= '<dt class="col-sm-3">Wohneinheit</dt><dd class="col-sm-9">'.htmlspecialchars($title).'</dd>';
         $html .= '<dt class="col-sm-3">Eigentümer</dt><dd class="col-sm-9">'.htmlspecialchars($ownerStr).'</dd>';
         $html .= '<dt class="col-sm-3">Hausverwaltung</dt><dd class="col-sm-9">'.htmlspecialchars($managerStr).'</dd>';
-        $html .= '<dt class="col-sm-3">Art</dt><dd class="col-sm-9">'.htmlspecialchars($d['type'] ?? '').'</dd>';
+        $html .= '<dt class="col-sm-3">Art</dt><dd class="col-sm-9">'.htmlspecialchars(($d['type']==='einzug'?'Einzugsprotokoll':($d['type']==='auszug'?'Auszugsprotokoll':'Zwischenprotokoll'))).'</dd>';
         $html .= '<dt class="col-sm-3">Mieter</dt><dd class="col-sm-9">'.htmlspecialchars($d['tenant_name'] ?? '').'</dd>';
         $html .= '</dl>';
 
@@ -330,6 +389,10 @@ final class ProtocolWizardController
             foreach ($data['rooms'] as $k=>$r) { $html .= '<li class="list-group-item"><strong>'.htmlspecialchars($r['name'] ?? '').'</strong> — '.htmlspecialchars($r['state'] ?? '').'</li>'; }
             $html .= '</ul>';
         }
+
+        // Signatur‑Platzhalter
+        $third = trim((string)($data['meta']['third_attendee'] ?? ''));
+        $html .= '<div class="alert alert-info">Unterschriften (Platzhalter): Mieter, Eigentümer'.($third!==''?', dritte Person: '.htmlspecialchars($third):'').'.</div>';
 
         $html .= '<form method="post" action="/protocols/wizard/finish?draft='.$draftId.'"><div class="d-flex gap-2">';
         $html .= '<a class="btn btn-outline-secondary" href="/protocols/wizard?step=4&draft='.$draftId.'">Zurück</a>';
