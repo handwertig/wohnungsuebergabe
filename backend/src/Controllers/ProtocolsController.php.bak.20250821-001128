@@ -155,7 +155,7 @@ final class ProtocolsController
         fclose($out); exit;
     }
 
-    /** Editor (Tabs) inkl. Eigentümer/HV, Raum-Hinweise, Datenschutz, Versand/Status */
+    /** Editor (Tabs) inkl. Eigentümer/HV, Room-Keys, Foto-Uploads, Status/Versand unten */
     public function form(): void
     {
         Auth::requireAuth();
@@ -194,13 +194,6 @@ final class ProtocolsController
 
         $title=$p['city'].', '.$p['street'].' '.$p['house_no'].' – '.$p['unit_label'];
 
-        // Datenschutzerklärung (aktuellste Version) LADEN — außerhalb von HTML!
-        $ltStmt = $pdo->prepare("SELECT title, content, version FROM legal_texts WHERE name=? ORDER BY version DESC LIMIT 1");
-        $ltStmt->execute(['datenschutz']);
-        $legalPrivacy = $ltStmt->fetch(PDO::FETCH_ASSOC) ?: ['title'=>'Datenschutzerklärung','content'=>'','version'=>0];
-        $cons = $meta['consents'] ?? [];
-        $privacyChecked = !empty($cons['privacy']) ? ' checked' : '';
-
         $html  = '<h1 class="h5 mb-2">Protokoll bearbeiten</h1>';
         $html .= '<div class="text-muted mb-3">'.self::h($title).'</div>';
 
@@ -220,6 +213,7 @@ final class ProtocolsController
         // Tab Kopf
         $html .= '<div class="tab-pane fade show active" id="tab-kopf">';
         $html .= '<div class="row g-3">';
+        // Art
         $opts = [['einzug','Einzugsprotokoll'],['auszug','Auszugsprotokoll'],['zwischen','Zwischenprotokoll']];
         $html .= '<div class="col-md-4"><label class="form-label">Art</label><select class="form-select" name="type">';
         foreach ($opts as $o) {
@@ -227,7 +221,9 @@ final class ProtocolsController
             $html .= '<option value="'.self::h($o[0]).'"'.$sel.'>'.self::h($o[1]).'</option>';
         }
         $html .= '</select></div>';
+        // Mieter
         $html .= '<div class="col-md-6"><label class="form-label">Mietername</label><input class="form-control" name="tenant_name" value="'.self::h($p['tenant_name'] ?? '').'" required></div>';
+        // Zeit
         $html .= '<div class="col-md-2"><label class="form-label">Zeitstempel</label><input class="form-control" type="datetime-local" name="timestamp" value="'.self::h($payload['timestamp'] ?? '').'"></div>';
         $html .= '</div><hr>';
 
@@ -257,10 +253,10 @@ final class ProtocolsController
             $html .= '<option value="'.self::h($m['id']).'"'.$sel.'>'.self::h($label).'</option>';
         }
         $html .= '</select></div>';
+        $html .= '</div>';
         $html .= '</div>'; // tab-kopf
-        $html .= '</div>'; // pane
 
-        // Tab Räume (mit Hinweisen IST-Zustand & Geruch)
+        // Tab Räume
         $html .= '<div class="tab-pane fade" id="tab-raeume">';
         $html .= '<div class="d-flex justify-content-between align-items-center mb-2"><h6 class="mb-0">Räume</h6><button class="btn btn-sm btn-outline-primary" id="add-room-btn">+ Raum</button></div>';
         $html .= '<div id="rooms-wrap">';
@@ -269,9 +265,11 @@ final class ProtocolsController
             $html .= '<div class="card mb-3"><div class="card-body"><div class="row g-3">';
             $html .= '<input type="hidden" name="rooms['.self::h($rk).'][key]" value="'.self::h($rk).'">';
             $html .= '<div class="col-md-4"><label class="form-label">Raumname</label><input class="form-control" name="rooms['.self::h($rk).'][name]" value="'.self::h($r['name'] ?? '').'"></div>';
-            $html .= '<div class="col-md-4"><label class="form-label">Geruch</label><input class="form-control" name="rooms['.self::h($rk).'][smell]" value="'.self::h($r['smell'] ?? '').'"><div class="form-text">Hinweis: Gerüche sind Teil des IST‑Zustands und sollten sachlich dokumentiert werden. Beschreiben Sie Art, Intensität und mögliche Ursache (z. B. „deutlicher Tabakgeruch im Wohnzimmer, auch nach Lüften wahrnehmbar“) – vermeiden Sie subjektive Bewertungen.</div></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">Geruch</label><input class="form-control" name="rooms['.self::h($rk).'][smell]" value="'.self::h($r['smell'] ?? '').'">
+<div class="form-text">Hinweis: Gerüche sind Teil des IST-Zustands und sollten sachlich dokumentiert werden. Beschreiben Sie Art, Intensität und mögliche Ursache (z. B. „deutlicher Tabakgeruch im Wohnzimmer, auch nach Lüften wahrnehmbar“) – vermeiden Sie subjektive Bewertungen.</div></div>';
             $html .= '<div class="col-md-4 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" name="rooms['.self::h($rk).'][accepted]" '.(!empty($r['accepted'])?'checked':'').'> <label class="form-check-label">Abnahme erfolgt</label></div></div>';
-            $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" rows="3" name="rooms['.self::h($rk).'][state]">'.self::h($r['state'] ?? '').'</textarea><div class="form-text">Hinweis: Bitte beschreiben Sie den IST‑Zustand vollständig – sowohl positive Feststellungen (z. B. „Wände weiß gestrichen, ohne Schäden“) als auch negative Feststellungen (z. B. „Kratzer an der Wohnzimmertür, ca. 10 cm, mittig“). Achten Sie auf eine objektive, wertfreie, präzise und konkrete Formulierung, die auch für Dritte verständlich ist.</div></div>';
+            $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" rows="3" name="rooms['.self::h($rk).'][state]">'.self::h($r['state'] ?? '').'</textarea>
+<div class="form-text">Hinweis: Bitte beschreiben Sie den IST-Zustand vollständig – sowohl positive Feststellungen (z. B. „Wände weiß gestrichen, ohne Schäden“) als auch negative Feststellungen (z. B. „Kratzer an der Wohnzimmertür, ca. 10 cm, mittig“). Achten Sie auf eine objektive, wertfreie, präzise und konkrete Formulierung, die auch für Dritte verständlich ist.</div></div>';
             $html .= '<div class="col-md-6"><label class="form-label">WMZ Nummer</label><input class="form-control" name="rooms['.self::h($rk).'][wmz_no]" value="'.self::h($r['wmz_no'] ?? '').'"></div>';
             $html .= '<div class="col-md-6"><label class="form-label">WMZ Stand</label><input class="form-control" inputmode="decimal" pattern="^[0-9]+([.,][0-9]{1,3})?$" name="rooms['.self::h($rk).'][wmz_val]" value="'.self::h($r['wmz_val'] ?? '').'"></div>';
             $html .= '<div class="col-12"><label class="form-label">Fotos (JPG/PNG, max. 10MB)</label><input class="form-control" type="file" name="room_photos['.self::h($rk).'][]" multiple accept="image/*"></div>';
@@ -279,7 +277,7 @@ final class ProtocolsController
             if ($thumbs) {
                 $html .= '<div class="col-12"><div class="d-flex flex-wrap gap-2">';
                 foreach ($thumbs as $t) {
-                    if (!empty($t['url'])) $html .= '<a href="'.self::h($t['url']).'" target="_blank"><img src="'.self::h($t['url']).'" style="width:120px;height:80px;object-fit:cover;"></a>';
+                    if (!empty($t['url'])) $html .= '<a href="'.self::h($t['url']).'" target="_blank"><img src="'.self::h($t['url']).'" style="width:120px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #ddd;"></a>';
                 }
                 $html .= '</div></div>';
             } else {
@@ -292,9 +290,11 @@ final class ProtocolsController
         $html .= '<template id="room-template"><div class="card mb-3"><div class="card-body"><div class="row g-3">';
         $html .= '<input type="hidden" name="rooms[__IDX__][key]" value="__IDX__">';
         $html .= '<div class="col-md-4"><label class="form-label">Raumname</label><input class="form-control" name="rooms[__IDX__][name]"></div>';
-        $html .= '<div class="col-md-4"><label class="form-label">Geruch</label><input class="form-control" name="rooms[__IDX__][smell]"><div class="form-text">Hinweis: Gerüche sind Teil des IST‑Zustands und sollten sachlich dokumentiert werden. Beschreiben Sie Art, Intensität und mögliche Ursache – vermeiden Sie subjektive Bewertungen.</div></div>';
+        $html .= '<div class="col-md-4"><label class="form-label">Geruch</label><input class="form-control" name="rooms[__IDX__][smell]">
+<div class="form-text">Hinweis: Gerüche sind Teil des IST-Zustands und sollten sachlich dokumentiert werden. Beschreiben Sie Art, Intensität und mögliche Ursache (z. B. „deutlicher Tabakgeruch im Wohnzimmer, auch nach Lüften wahrnehmbar“) – vermeiden Sie subjektive Bewertungen.</div></div>';
         $html .= '<div class="col-md-4 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" name="rooms[__IDX__][accepted]"> <label class="form-check-label">Abnahme erfolgt</label></div></div>';
-        $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" rows="3" name="rooms[__IDX__][state]"></textarea><div class="form-text">Hinweis: Bitte beschreiben Sie den IST‑Zustand vollständig – positive wie negative Feststellungen; objektiv, präzise, konkret.</div></div>';
+        $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" rows="3" name="rooms[__IDX__][state]"></textarea>
+<div class="form-text">Hinweis: Bitte beschreiben Sie den IST-Zustand vollständig – sowohl positive Feststellungen (z. B. „Wände weiß gestrichen, ohne Schäden“) als auch negative Feststellungen (z. B. „Kratzer an der Wohnzimmertür, ca. 10 cm, mittig“). Achten Sie auf eine objektive, wertfreie, präzise und konkrete Formulierung, die auch für Dritte verständlich ist.</div></div>';
         $html .= '<div class="col-md-6"><label class="form-label">WMZ Nummer</label><input class="form-control" name="rooms[__IDX__][wmz_no]"></div>';
         $html .= '<div class="col-md-6"><label class="form-label">WMZ Stand</label><input class="form-control" inputmode="decimal" pattern="^[0-9]+([.,][0-9]{1,3})?$" name="rooms[__IDX__][wmz_val]"></div>';
         $html .= '<div class="col-12"><label class="form-label">Fotos (JPG/PNG)</label><input class="form-control" type="file" name="room_photos[__IDX__][]" multiple accept="image/*"></div>';
@@ -319,7 +319,7 @@ final class ProtocolsController
         }
         $html .= '</div>';
 
-        // Schlüssel & Meta (+ Datenschutz)
+        // Schlüssel & Meta
         $html .= '<div class="tab-pane fade" id="tab-schluessel">';
         $html .= '<h6>Schlüssel</h6><div id="keys-wrap">';
         $i=0; foreach ($keys as $k) { $i++;
@@ -332,14 +332,30 @@ final class ProtocolsController
         }
         $html .= '</div><button class="btn btn-sm btn-outline-primary" id="add-key-btn">+ Schlüssel</button>';
 
-        // Weitere Angaben (+ Datenschutz)
         $bank = $meta['bank'] ?? ['bank'=>'','iban'=>'','holder'=>''];
         $tc   = $meta['tenant_contact'] ?? ['email'=>'','phone'=>''];
         $na   = $meta['tenant_new_addr'] ?? ['street'=>'','house_no'=>'','postal_code'=>'','city'=>''];
-        $cons = $meta['consents'] ?? [];
+        $cons = $meta['consents'] ?? ['marketing'=>false,'disposal'=>false];
         $third= $meta['third_attendee'] ?? '';
 
-        $html .= '<hr><h6>Weitere Angaben</h6><div class="row g-3">';
+        $html .= '<hr><h6>Weitere Angaben</h6><div class="row g-3">
+<?php
+   = \App\Database::pdo()->prepare("SELECT title, content, version FROM legal_texts WHERE name=\datenschutz ORDER BY version DESC LIMIT 1");
+  ->execute(); $lt = $ltStmt->fetch(PDO::FETCH_ASSOC) ?: ["title"=>"Datenschutzerklärung","content"=>"","version"=>0];
+  $checkedPrivacy = !empty(($meta["consents"]["privacy"] ?? false)) ? " checked" : "";
+?>
+
+
+<?php
+   = \App\Database::pdo()->prepare("SELECT title, content, version FROM legal_texts WHERE name='datenschutz' ORDER BY version DESC LIMIT 1");
+  ->execute();  = ->fetch(PDO::FETCH_ASSOC) ?: ["title"=>"Datenschutzerklärung","content"=>"","version"=>0];
+   = !empty(( ?? false)) ? " checked" : "";
+?>
+<div class="col-12"><label class="form-label">Datenschutzerklärung (v<?= (int)( ?? 0) ?>)</label>
+  <div class="border p-2 small"><?=  ?? "" ?></div>
+  <div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="meta[consents][privacy]"<?=  ?>> <label class="form-check-label">Ich habe die Datenschutzerklärung gelesen und akzeptiere sie.</label></div>
+</div>
+';
         $html .= '<div class="col-md-4"><label class="form-label">Bank</label><input class="form-control" name="meta[bank][bank]" value="'.self::h($bank['bank']).'"></div>';
         $html .= '<div class="col-md-4"><label class="form-label">IBAN</label><input class="form-control" name="meta[bank][iban]" value="'.self::h($bank['iban']).'"></div>';
         $html .= '<div class="col-md-4"><label class="form-label">Kontoinhaber</label><input class="form-control" name="meta[bank][holder]" value="'.self::h($bank['holder']).'"></div>';
@@ -350,15 +366,15 @@ final class ProtocolsController
         $html .= '<div class="col-md-2"><label class="form-label">Haus‑Nr.</label><input class="form-control" name="meta[tenant_new_addr][house_no]" value="'.self::h($na['house_no']).'"></div>';
         $html .= '<div class="col-md-2"><label class="form-label">PLZ</label><input class="form-control" name="meta[tenant_new_addr][postal_code]" value="'.self::h($na['postal_code']).'"></div>';
         $html .= '<div class="col-md-2"><label class="form-label">Ort</label><input class="form-control" name="meta[tenant_new_addr][city]" value="'.self::h($na['city']).'"></div>';
-        // Datenschutz-Block
-        $html .= '<div class="col-12"><label class="form-label">Datenschutzerklärung (v'.(int)($legalPrivacy['version'] ?? 0).')</label>';
-        $html .= '<div class="border p-2 small">'.($legalPrivacy['content'] ?? '').'</div>';
-        $html .= '<div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="meta[consents][privacy]"'.$privacyChecked.'> <label class="form-check-label">Ich habe die Datenschutzerklärung gelesen und akzeptiere sie.</label></div></div>';
-        // Einwilligungen (weitere)
         $html .= '<div class="col-12"><label class="form-label">Einwilligungen</label></div>';
         $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[consents][marketing]" '.(!empty($cons['marketing'])?'checked':'').'> <label class="form-check-label">E‑Mail‑Marketing (außerhalb Mietverhältnis)</label></div></div>';
         $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[consents][disposal]" '.(!empty($cons['disposal'])?'checked':'').'> <label class="form-check-label">Einverständnis Entsorgung zurückgelassener Gegenstände</label></div></div>';
         $html .= '</div>'; // weitere Angaben
+
+        $html .= '<hr><h6>Versand</h6><div class="row g-3">';
+        $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[owner_send]" '.(!empty($meta['owner_send'])?'checked':'').'> <label class="form-check-label">an Eigentümer senden</label></div></div>';
+        $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[manager_send]" '.(!empty($meta['manager_send'])?'checked':'').'> <label class="form-check-label">an Verwaltung senden</label></div></div>';
+        $html .= '</div>';
 
         $html .= '<hr><h6>Dritte anwesende Person (optional)</h6><div class="row g-3">';
         $html .= '<div class="col-md-6"><input class="form-control" name="meta[third_attendee]" value="'.self::h($third).'"></div>';
@@ -369,10 +385,15 @@ final class ProtocolsController
         $html .= '</div>'; // tab-schluessel
         $html .= '</div>'; // tab-content
 
-        // Sticky-Actions
-        $html .= '<div class="kt-sticky-actions"><div><a class="btn btn-ghost" href="/protocols"><i class="bi bi-x-lg"></i> Zurück</a></div>';
-        $html .= '<div class="d-flex gap-2"><button class="btn btn-primary">Speichern (neue Version)</button></div></div>';
-        $html .= '</form>';
+        $html .= '<div class="kt-sticky-actions">
+  <div>
+    <a class="btn btn-ghost" href="/protocols"><i class="bi bi-x-lg"></i> Zurück</a>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-primary btn-lg"><i class="bi bi-save2"></i> Speichern (neue Version)</button>
+  </div>
+</div>
+</form>';
 
         // Versand/Status-Log
         $evStmt = $pdo->prepare("SELECT type, message, created_at FROM protocol_events WHERE protocol_id=? ORDER BY created_at DESC LIMIT 50");
@@ -424,7 +445,7 @@ final class ProtocolsController
         View::render('Protokoll – Bearbeiten', $html);
     }
 
-    /** Speichern */
+    /** Speichern: Validierung, Payload, Foto-Uploads (mit thumb_path), Versionierung */
     public function save(): void
     {
         Auth::requireAuth();
@@ -538,41 +559,4 @@ final class ProtocolsController
         }
         header('Location:/protocols'); exit;
     }
-    
-    /** PDF-Export (letzte Version) */
-    public function pdf(): void
-    {
-        $pdo = \App\Database::pdo();
-        $id = (string)($_GET['protocol_id'] ?? '');
-        if ($id === '') { http_response_code(400); echo "protocol_id fehlt"; return; }
-    
-        $st = $pdo->prepare("SELECT * FROM protocols WHERE id=? LIMIT 1");
-        $st->execute([$id]);
-        $p = $st->fetch(\PDO::FETCH_ASSOC);
-        if (!$p) { http_response_code(404); echo "Protokoll nicht gefunden"; return; }
-    
-        // ⚠️ Minimaler PDF-Stub – später ersetzen wir das durch richtiges Template
-        header("Content-Type: application/pdf");
-        header("Content-Disposition: inline; filename=protokoll.pdf");
-        echo "%PDF-1.4\n1 0 obj <<>> endobj\ntrailer <<>>\n%%EOF";
-        exit;
-    }
-    
-    /** PDF per Mail versenden (Stub) */
-    public function send(): void
-    {
-        $pdo = \App\Database::pdo();
-        $id = (string)($_GET['protocol_id'] ?? '');
-        $to = (string)($_GET['to'] ?? 'owner');
-    
-        if ($id === '') { http_response_code(400); echo "protocol_id fehlt"; return; }
-    
-        // Mail vorbereiten (Stub)
-        // TODO: SMTP aus Settings laden, PDF generieren, versenden, Versandlog schreiben
-        echo json_encode([
-            'status' => 'ok',
-            'message' => "PDF an {$to} für Protokoll {$id} versendet (Stub)"
-        ]);
-    }
-
 }

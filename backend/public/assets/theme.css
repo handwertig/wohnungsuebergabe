@@ -1,0 +1,157 @@
+/* === Quantum-Style Theme Layer for Bootstrap (override via CSS vars) === */
+
+/* 1) Farbpalette – hier mit Beispielwerten (später auf Quantum-Werte umstellen) */
+:root {
+  /* Brand */
+  --brand-primary: #5b6cff;   /* kräftiges Indigo/Blau */
+  --brand-secondary: #0ea5e9; /* Akzent Cyan */
+  --brand-success: #22c55e;
+  --brand-warning: #f59e0b;
+  --brand-danger:  #ef4444;
+  --brand-info:    #38bdf8;
+
+  /* Oberfläche */
+  --surface-bg:    #f8fafc;   /* sehr hell */
+  --surface-card:  #ffffff;
+  --surface-muted: #f1f5f9;
+
+  /* Text */
+  --text-main:     #0f172a;
+  --text-muted:    #475569;
+
+  /* Ränder, Schatten, Radien */
+  --radius-xl:     16px;
+  --radius-lg:     12px;
+  --radius-md:     10px;
+  --shadow-sm:     0 1px 2px rgba(15,23,42,.06);
+  --shadow-md:     0 6px 16px rgba(15,23,42,.08);
+  --shadow-lg:     0 14px 32px rgba(15,23,42,.12);
+
+  /* Bootstrap Variable Overrides */
+  --bs-body-bg:            var(--surface-bg);
+  --bs-body-color:         var(--text-main);
+  --bs-primary:            var(--brand-primary);
+  --bs-primary-rgb:        91,108,255;
+  --bs-secondary:          var(--brand-secondary);
+  --bs-success:            var(--brand-success);
+  --bs-warning:            var(--brand-warning);
+  --bs-danger:             var(--brand-danger);
+  --bs-info:               var(--brand-info);
+  --bs-border-radius:      var(--radius-md);
+  --bs-border-radius-lg:   var(--radius-lg);
+  --bs-border-radius-xl:   var(--radius-xl);
+  --bs-link-color:         var(--brand-primary);
+  --bs-link-hover-color:   #384cff;
+}
+
+/* 2) Dark Mode (auto) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-bg:    #0b1020;
+    --surface-card:  #0f162e;
+    --surface-muted: #121a36;
+    --text-main:     #e6e9f2;
+    --text-muted:    #96a2c0;
+    --brand-primary: #7c8cff;
+    --brand-secondary: #22c4ff;
+    --bs-body-bg:    var(--surface-bg);
+    --bs-body-color: var(--text-main);
+  }
+  .card { box-shadow: var(--shadow-sm); }
+}
+
+/* 3) Typografie – stelle hier Quantum-Schrift(en) ein */
+:root {
+  --font-sans: "Inter", "SF Pro Text", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+}
+body { font-family: var(--font-sans); letter-spacing: .01em; }
+
+/* 4) Container & Layout-Feeling */
+main.container { max-width: 1200px; }
+
+/* 5) Navbar */
+.navbar {
+  background: linear-gradient(135deg, var(--brand-primary), #384cff);
+  box-shadow: var(--shadow-md);
+}
+.navbar .navbar-brand { font-weight: 700; letter-spacing: .02em; }
+.navbar .nav-link { color: #e6e9f8 !important; opacity: .95; }
+.navbar .nav-link:hover { opacity: 1; }
+
+/* 6) Cards */
+.card {
+  border: 0;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+}
+.card .card-header {
+  border: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,.03), rgba(0,0,0,0));
+  font-weight: 600;
+}
+
+/* 7) Buttons */
+.btn-primary {
+  background: var(--brand-primary);
+  border: 0;
+  box-shadow: 0 6px 16px rgba(91,108,255,.25);
+}
+.btn-primary:hover { filter: brightness(.96); }
+.btn-outline-primary {
+  color: var(--brand-primary);
+  border-color: rgba(91,108,255,.45);
+}
+.btn-outline-primary:hover {
+  background: rgba(91,108,255,.08);
+  border-color: rgba(91,108,255,.7);
+}
+
+/* 8) Tables */
+.table thead th {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border-bottom: 0;
+}
+.table { border-radius: var(--radius-md); overflow: hidden; }
+
+/* 9) Forms */
+.form-control, .form-select {
+  border-radius: var(--radius-md);
+  border-color: rgba(15,23,42,.12);
+}
+.form-control:focus, .form-select:focus {
+  border-color: rgba(91,108,255,.6);
+  box-shadow: 0 0 0 .2rem rgba(91,108,255,.15);
+}
+
+/* 10) Accordion */
+.accordion-button {
+  border-radius: var(--radius-md) !important;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: .5rem;
+}
+.accordion-item { border: 0; background: transparent; }
+
+/* 11) Badges */
+.badge.bg-success, .badge.bg-danger, .badge.bg-warning, .badge.bg-info {
+  box-shadow: var(--shadow-sm);
+}
+
+/* 12) Utility */
+.shadow-md { box-shadow: var(--shadow-md) !important; }
+.rounded-xl { border-radius: var(--radius-xl) !important; }
+
+/* Manual Theme override (data-theme on <html>) */
+html[data-theme="dark"] :root {
+  --surface-bg:    #0b1020;
+  --surface-card:  #0f162e;
+  --surface-muted: #121a36;
+  --text-main:     #e6e9f2;
+  --text-muted:    #96a2c0;
+  --brand-primary: #7c8cff;
+  --brand-secondary: #22c4ff;
+  --bs-body-bg:    var(--surface-bg);
+  --bs-body-color: var(--text-main);
+}

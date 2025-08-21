@@ -1,0 +1,2 @@
+ALTER TABLE protocol_files
+  ADD COLUMN IF NOT EXISTS thumb_path VARCHAR(500) NULL;

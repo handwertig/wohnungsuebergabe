@@ -1,0 +1,2 @@
+ALTER TABLE protocol_versions
+  ADD COLUMN IF NOT EXISTS pdf_path VARCHAR(500) NULL;
