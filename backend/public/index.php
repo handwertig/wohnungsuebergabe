@@ -19,11 +19,11 @@ use App\Controllers\UsersController;
 use App\Controllers\PasswordController;
 use App\Controllers\ProtocolsController;
 use App\Controllers\ProtocolWizardController;
+
+
 use App\Controllers\SettingsController;
 use App\Controllers\SignaturesController;
 use App\Controllers\DocusignController;
-use App\Controllers\MailController;
-use App\Controllers\PdfController;
 use App\Auth;
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';

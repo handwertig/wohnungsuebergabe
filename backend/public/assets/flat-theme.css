@@ -99,3 +99,53 @@ h1,h2,h3,h4 { font-weight:600; color: var(--g-900); }
 
 /* Topbar actions right-aligned */
 .kt-actions { margin-left: auto; display:flex; align-items:center; gap:.5rem; }
+
+/* === Off-Canvas Sidebar (mobile) ======================================= */
+.kt-aside-backdrop {
+  position: fixed; inset:0; background: rgba(0,0,0,.4);
+  opacity:0; visibility:hidden; transition: opacity .2s ease;
+}
+.kt-aside-backdrop.show { opacity:1; visibility:visible; }
+
+@media (max-width: 991.98px) {
+  .kt-aside {
+    position: fixed; inset:0 auto 0 0; width: 280px;
+    transform: translateX(-100%); transition: transform .22s ease-out;
+    z-index: 1040; background: var(--g-100); border-right: 1px solid var(--g-150);
+  }
+  .kt-aside.show { transform: translateX(0); }
+  body.offcanvas-open { overflow: hidden; }
+}
+
+/* === Auth Layout helpers =============================================== */
+.auth-wrap {
+  min-height: calc(100vh - 56px);
+  display: grid; place-items: center;
+  padding: 2rem 1rem;
+}
+.auth-card { width: 100%; max-width: 420px; border:1px solid var(--g-150); border-radius:0; }
+
+/* === Off-Canvas Sidebar (mobile) ======================================= */
+.kt-aside-backdrop {
+  position: fixed; inset:0; background: rgba(0,0,0,.4);
+  opacity:0; visibility:hidden; transition: opacity .2s ease;
+}
+.kt-aside-backdrop.show { opacity:1; visibility:visible; }
+
+@media (max-width: 991.98px) {
+  .kt-aside {
+    position: fixed; inset:0 auto 0 0; width: 280px;
+    transform: translateX(-100%); transition: transform .22s ease-out;
+    z-index: 1040; background: var(--g-100); border-right: 1px solid var(--g-150);
+  }
+  .kt-aside.show { transform: translateX(0); }
+  body.offcanvas-open { overflow: hidden; }
+}
+
+/* === Auth Layout helpers =============================================== */
+.auth-wrap {
+  min-height: calc(100vh - 56px);
+  display: grid; place-items: center;
+  padding: 2rem 1rem;
+}
+.auth-card { width: 100%; max-width: 420px; border:1px solid var(--g-150); border-radius:0; }
