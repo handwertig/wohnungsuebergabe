@@ -22,6 +22,7 @@ use App\Controllers\ProtocolWizardController;
 
 
 use App\Controllers\SettingsController;
+use App\Controllers\DocusignWebhookController;
 use App\Controllers\SignaturesController;
 use App\Controllers\DocusignController;
 use App\Auth;

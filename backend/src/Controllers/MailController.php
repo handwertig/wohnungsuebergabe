@@ -29,7 +29,12 @@ final class MailController
         if ($versionNo <= 0) { Flash::add('error','Keine Version vorhanden.'); header('Location: /protocols/edit?id='.$protocolId); return; }
 
         // PDF generieren (falls nicht vorhanden)
-        $pdfPath = $pdo->prepare("SELECT pdf_path FROM protocol_versions WHERE protocol_id=? AND version_no=?");
+        $pdfRow = $pdo->prepare("SELECT signed_pdf_path, pdf_path FROM protocol_versions WHERE protocol_id=? AND version_no=?");
+$pdfRow->execute([$protocolId,$versionNo]);
+$rowPdf = $pdfRow->fetch(\PDO::FETCH_ASSOC);
+$path = (string)($rowPdf["signed_pdf_path"] ?? "");
+if ($path === "" || !is_file($path)) { $path = (string)($rowPdf["pdf_path"] ?? ""); }
+if ($path === "" || !is_file($path)) { $path = \App\PdfService::renderAndSave($protocolId, $versionNo, true); }
         $pdfPath->execute([$protocolId,$versionNo]); $path=(string)$pdfPath->fetchColumn();
         if (!$path || !is_file($path)) { $path = \App\PdfService::renderAndSave($protocolId, $versionNo); }
 
@@ -78,7 +83,11 @@ final class MailController
         $subject = sprintf('Übergabeprotokoll – %s %s – %s (v%d)',
             (string)($addr['street'] ?? ''), (string)($addr['house_no'] ?? ''), (string)($addr['city'] ?? ''), $versionNo);
         $mail->Subject = $subject;
-        $mail->Body = "Guten Tag,\n\nanbei erhalten Sie das Übergabeprotokoll als PDF.\n\nMit freundlichen Grüßen\nWohnungsübergabe";
+        $mail->Body = "Guten Tag,\n\n".
+  "im Anhang erhalten Sie das Übergabeprotokoll (".$row['tenant_name'].").".
+  "\nObjekt: ".($addr['street'] ?? '')." ".($addr['house_no'] ?? '').", ".($addr['city'] ?? '')."\n".
+  "Version: v".$versionNo." (erstellt: ".($row['v_created_at'] ?? '').")\n\n".
+  "Mit freundlichen Grüßen\nWohnungsübergabe";
         $mail->addAttachment($path, 'protokoll_v'.$versionNo.'.pdf');
 
         // Log vorbereiten

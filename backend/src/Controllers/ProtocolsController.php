@@ -234,7 +234,7 @@ final class ProtocolsController
         // Adresse
         $html .= '<div class="row g-3">';
         $html .= '<div class="col-md-4"><label class="form-label">Ort</label><input class="form-control" name="address[city]" value="'.self::h($addr['city'] ?? '').'" required></div>';
-        $html .= '<div class="col-md-2"><label class="form-label">PLZ</label><input class="form-control" name="address[postal_code]" value="'.self::h($addr['postal_code'] ?? '').'"></div>';
+        $html .= '<div class="col-md-2"><label class="form-label">PLZ</label><input class="form-control" name="address[postal_code]" pattern="^d{5}  title="Bitte fünstellige PLZ eingeben" inputmode="numeric" value="'.self::h($addr['postal_code'] ?? '').'"></div>';
         $html .= '<div class="col-md-4"><label class="form-label">Straße</label><input class="form-control" name="address[street]" value="'.self::h($addr['street'] ?? '').'" required></div>';
         $html .= '<div class="col-md-2"><label class="form-label">Haus‑Nr.</label><input class="form-control" name="address[house_no]" value="'.self::h($addr['house_no'] ?? '').'" required></div>';
         $html .= '<div class="col-md-4"><label class="form-label">WE‑Bezeichnung</label><input class="form-control" name="address[unit_label]" value="'.self::h($addr['unit_label'] ?? '').'"></div>';
@@ -341,10 +341,10 @@ final class ProtocolsController
 
         $html .= '<hr><h6>Weitere Angaben</h6><div class="row g-3">';
         $html .= '<div class="col-md-4"><label class="form-label">Bank</label><input class="form-control" name="meta[bank][bank]" value="'.self::h($bank['bank']).'"></div>';
-        $html .= '<div class="col-md-4"><label class="form-label">IBAN</label><input class="form-control" name="meta[bank][iban]" value="'.self::h($bank['iban']).'"></div>';
+        $html .= '<div class="col-md-4"><label class="form-label">IBAN</label><input class="form-control" name="meta[bank][iban]" pattern="[A-Za-z]{2}d{2}[A-Za-z0-9]{6,28}" title="IBAN: Länderkennzeichen + Prüfziffer + Konto-ID" inputmode="text" value="'.self::h($bank['iban']).'"></div>';
         $html .= '<div class="col-md-4"><label class="form-label">Kontoinhaber</label><input class="form-control" name="meta[bank][holder]" value="'.self::h($bank['holder']).'"></div>';
-        $html .= '<div class="col-md-4"><label class="form-label">Mieter E‑Mail</label><input type="email" class="form-control" name="meta[tenant_contact][email]" value="'.self::h($tc['email']).'"></div>';
-        $html .= '<div class="col-md-4"><label class="form-label">Mieter Telefon</label><input class="form-control" name="meta[tenant_contact][phone]" value="'.self::h($tc['phone']).'"></div>';
+        $html .= '<div class="col-md-4"><label class="form-label">Mieter E‑Mail</label><input type="email" class="form-control" name="meta[tenant_contact][email]" type="email" value="'.self::h($tc['email']).'"></div>';
+        $html .= '<div class="col-md-4"><label class="form-label">Mieter Telefon</label><input class="form-control" name="meta[tenant_contact][phone]" pattern="^[0-9+()/s-]{6,}  title="Zulässig: Ziffern, +, /, -, (), Leerzeichen" inputmode="tel" value="'.self::h($tc['phone']).'"></div>';
         $html .= '<div class="col-12"><label class="form-label">Neue Meldeadresse</label></div>';
         $html .= '<div class="col-md-6"><label class="form-label">Straße</label><input class="form-control" name="meta[tenant_new_addr][street]" value="'.self::h($na['street']).'"></div>';
         $html .= '<div class="col-md-2"><label class="form-label">Haus‑Nr.</label><input class="form-control" name="meta[tenant_new_addr][house_no]" value="'.self::h($na['house_no']).'"></div>';

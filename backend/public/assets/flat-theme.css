@@ -149,3 +149,11 @@ h1,h2,h3,h4 { font-weight:600; color: var(--g-900); }
   padding: 2rem 1rem;
 }
 .auth-card { width: 100%; max-width: 420px; border:1px solid var(--g-150); border-radius:0; }
+
+/* Info-Icon neben Labels */
+.info-icon { font-size: 0.92rem; color: var(--g-500); cursor: help; vertical-align: middle; }
+.info-icon:hover { color: var(--bs-primary); }
+
+/* Info-Icon neben Labels */
+.info-icon { font-size: 0.92rem; color: var(--g-500); cursor: help; vertical-align: middle; }
+.info-icon:hover { color: var(--bs-primary); }

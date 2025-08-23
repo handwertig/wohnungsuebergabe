@@ -1,0 +1,3 @@
+ALTER TABLE protocol_versions
+  ADD COLUMN IF NOT EXISTS signed_pdf_path VARCHAR(500) NULL,
+  ADD COLUMN IF NOT EXISTS signed_at DATETIME NULL;
