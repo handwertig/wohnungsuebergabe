@@ -6,10 +6,8 @@ Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/) und [S
 ---
 
 ## [Unreleased]
-- PDF-Design finalisieren
-- DocuSign-Integration mit Webhook
-- Erweiterte Statistiken (Durchlaufzeit, Datenqualität)
-- CSRF-/Security-Härtung
+### Removed
+- Alte Dashboard-Seite und Route (`/dashboard`)
 
 ---
 
