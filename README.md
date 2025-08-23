@@ -1,79 +1,113 @@
-# Wohnungsübergabe – Web-App (PHP + Docker)
+# Wohnungsübergabe-Software
 
-Digitale Erfassung, Versionierung und Versand von Übergabeprotokollen (Einzug / Auszug / Zwischenprotokoll).  
-Flat UI (ohne Schatten/Radien), Dark‑Mode, versionierte Rechtstexte, PDF‑Export pro Version und SMTP‑Versand.
+## Beschreibung
 
-## Inhalt
-- [Features](#features)
-- [Architektur & Stack](#architektur--stack)
-- [Schnellstart](#schnellstart)
-- [Konfiguration](#konfiguration)
-- [Datenmodell](#datenmodell)
-- [Pflichtenheft‑Abdeckung](#pflichtenheft-abdeckung)
-- [Entwicklung & Migrationen](#entwicklung--migrationen)
+Die **Wohnungsübergabe-Software** ist ein webbasiertes System zur Durchführung,
+Dokumentation und Archivierung von Wohnungsübergaben (Einzug, Auszug, Zwischenprotokoll).
+Sie ersetzt die bisherigen Papierprotokolle durch digitale Formulare, automatisiert
+die PDF-Erstellung, ermöglicht Versand per E-Mail (SMTP/Mailpit), bindet DocuSign
+für digitale Unterschriften ein und stellt umfassende Statistiken zur Verfügung.
+
+Zielgruppe sind Projektentwickler, Eigentümer, Hausverwaltungen und Vermieter, die
+Übergaben rechtssicher, transparent und effizient dokumentieren möchten.
 
 ## Features
-- **Wizard** (4 Schritte): Adresse/WE → Kopf (Art/Mieter) → Räume (Zustand, WMZ, Fotos) → Zähler → Schlüssel & Meta (Bank/Adresse/Kontakt/Einwilligungen) → Review.
-- **Eigentümer & Hausverwaltung**: in Schritt 1 wählbar bzw. Eigentümer inline anlegbar.
-- **Versionierung**: jede Speicherung erzeugt `protocol_versions` vN (Snapshot der JSON‑Payload).
-- **Rechtstexte** (Datenschutz, Entsorgung, Marketing) **versioniert** in den Einstellungen.
-- **PDF** je Version (Dompdf), Ablage unter `storage/pdfs/<protocol_id>/v<N>.pdf`.
-- **Versand** per SMTP (Eigentümer / HV / Mieter) mit Versandlog & Status‑Events.
-- **UI**: Flat‑Theme (Primary `#222357`, Secondary `#e22278`), Sidebar + Topbar, **Dark‑Mode** (Toggle).
 
-## Architektur & Stack
-- **PHP 8.3 FPM**, **Nginx**, **MariaDB 11**, **phpMyAdmin**, **Mailpit** (SMTP)
-- **Bootstrap 5.3** (pure, ohne Buildchain), **Poppins**‑Font
-- Composer‑Libs: `vlucas/phpdotenv`, `phpmailer/phpmailer`, `dompdf/dompdf`
-- Projektstruktur:
-  - `backend/public` (Frontcontroller, Assets)
-  - `backend/src` (Controller, Services, Helpers)
-  - `migrations` (SQL‑Migrationen)
-  - `backend/storage/uploads`, `backend/storage/pdfs`
+- **Benutzerverwaltung** (Login, Rollen, Passwort-Reset via Mailpit)
+- **Übergabeprotokoll-Wizard (4 Schritte)**
+  - Schritt 1: Adresse, Wohneinheit, Eigentümer, Hausverwaltung, Kopf
+  - Schritt 2: Räume inkl. IST-Zustand, Geruch, Wärmezähler, Fotos
+  - Schritt 3: Zählerstände (Strom, Wasser, Gas, Allgemein)
+  - Schritt 4: Schlüssel, Bankdaten, Kontaktdaten, Einwilligungen (DSGVO, Marketing, Entsorgung)
+- **Upload & Fotos** (Raum-Fotos, Preview im Editor)
+- **DocuSign-Integration** (Mieter, Eigentümer, optionale dritte Person)
+- **PDF-Export** mit Musterlogo, Rechtstexten, Versionsnummerierung
+- **E-Mail-Versand** der PDFs an Eigentümer / Hausverwaltung / Mieter
+- **Audit & Soft-Delete** (Änderungen & Löschungen protokolliert)
+- **Statistiken**
+  - Fluktuation nach Haus und Wohnung
+  - Quote und absolute Zahlen
+  - Einzugs-/Auszugs-/Zwischenprotokolle
+  - Ø Mietdauer, Ø Leerstand, globale Leerstandsquote
+  - Saisonale Spitzen
+  - Zähler-Analysen (Δ Verbrauch Einzug/Auszug)
 
-## Schnellstart
-```bash
-docker compose up -d --build
-docker compose exec app composer install
-# ENV
-cp backend/.env.example backend/.env
-# Migrationen (in Reihenfolge einspielen)
-for f in migrations/001_init.sql migrations/002_schema.sql          migrations/003_audit_softdelete.sql migrations/004_protocols.sql          migrations/005_password_reset.sql migrations/006_protocol_wizard.sql          migrations/010_app_settings.sql migrations/011_protocols_owner.sql          migrations/012_protocol_drafts_owner.sql migrations/013_protocol_manager.sql          migrations/014_legal_texts.sql migrations/015_protocol_versions_pdf.sql          migrations/016_protocol_events.sql migrations/017_email_log.sql          migrations/018_protocol_files_thumb.sql migrations/019_protocol_versions_legal_snapshot.sql
-do
-  cat "$f" | docker compose exec -T db sh -lc 'mariadb -uroot -proot app'
-done
-```
+## Technologie-Stack
 
-**URLs**
-- App: http://localhost:8080  
-- phpMyAdmin: http://localhost:8081  
-- Mailpit: http://localhost:8025 (SMTP: `mailpit:1025`)
+- **Backend:** PHP 8.3 (FPM), PDO, Composer  
+- **Frontend:** Bootstrap 5, eigenes Theme (Dark-/Lightmode, Flat-Design, #222357 / #e22278)  
+- **DB:** MariaDB 11 (MySQL-kompatibel)  
+- **Mail:** Mailpit (lokal) / SMTP  
+- **PDF:** Dompdf  
+- **Signatur:** DocuSign (API-Integration)  
+- **Docker-Setup:** Nginx, PHP-FPM, MariaDB, phpMyAdmin, Mailpit  
+- **Entwicklung:** GitHub-Repo, Notes.md für Entwicklerhinweise
 
-**Erstlogin**
-```bash
-HASH=$(docker compose exec -T app php -r 'echo password_hash("admin123", PASSWORD_BCRYPT);')
-docker compose exec -T db sh -lc "mariadb -uroot -proot app -e \"DELETE FROM users WHERE email='admin@example.com'; INSERT INTO users (id,email,password_hash,role,created_at) VALUES (UUID(),'admin@example.com','$HASH','admin',NOW());\""
-```
+## Installation & Setup
 
-## Konfiguration
-- **SMTP**: Einstellungen → SMTP (Host/Port/Sicherheit/User/Pass/From).
-- **DocuSign**: Einstellungen → DocuSign (vorbereitet; Versand‑Stub vorhanden).
-- **Rechtstexte**: Einstellungen → Rechtstexte (jede Änderung erzeugt neue Version).
+### Voraussetzungen
+- Docker & Docker Compose
+- Git
+- (optional) PHP CLI
 
-## Datenmodell (Auszug)
-- `objects` / `units`
-- `protocols` (`owner_id`, `manager_id`, `payload` JSON)
-- `protocol_versions` (`version_no`, `data`, `pdf_path`, `legal_snapshot`)
-- `protocol_drafts` (Entwürfe, `owner_id`, `manager_id`, `data`, `step`)
-- `protocol_files` (Uploads, `section`, `room_key`, `path`, `thumb_path`)
-- `legal_texts` (name: datenschutz/entsorgung/marketing, `version`, `content`)
-- `email_log`, `protocol_events`, `users`, `password_resets`
+### Schritte
 
-## Pflichtenheft‑Abdeckung
-- Wohnung & Mieter, Räume (IST‑Zustand, Geruch, WMZ), **Bilder je Raum**, Zählerstände, Schlüssel, Hinweise/Versand, Bank/IBAN, **neue Meldeadresse**, Kontakt (E‑Mail, Telefon), **Einwilligungen** (Marketing/Entsorgung + **Datenschutz**) — **alles im Wizard & Editor** vorhanden.
-- **Unterschriften**: Platzhalter + On‑Device‑Signaturen (Mieter/Eigentümer/optional Dritte Person); DocuSign‑Anbindung vorbereitet.
+    # Repository klonen
+    git clone https://github.com/handwertig/wohnungsuebergabe.git
+    cd wohnungsuebergabe
 
-## Entwicklung & Migrationen
-- Composer‐Abhängigkeiten: `docker compose exec app composer install`
-- Logs: `docker compose logs -f app`, `web`, `db`
-- Migrationen: siehe oben; neue SQLs im Ordner `migrations/`.
+    # Container starten
+    docker compose up -d --build
+
+    # Abhängigkeiten installieren (falls Composer-Dateien vorhanden)
+    docker compose exec app bash -lc 'if [ -f composer.json ]; then composer install --no-interaction; fi'
+
+    # Migrationen einspielen
+    cat migrations/*.sql | docker compose exec -T db sh -lc 'mariadb -uroot -proot app'
+
+    # Admin-User anlegen (Einzeiler)
+    docker compose exec app php -r "require 'vendor/autoload.php'; \$pdo=new PDO('mysql:host=db;dbname=app;charset=utf8mb4','app','app'); \$hash=password_hash('admin123', PASSWORD_BCRYPT); \$pdo->exec(\"INSERT INTO users (id,email,password_hash,role,created_at) VALUES (UUID(),'admin@example.com','\$hash','admin',NOW())\");"
+
+Danach ist die Anwendung erreichbar:
+
+- **App:** http://localhost:8080  
+- **phpMyAdmin:** http://localhost:8081  
+- **Mailpit:** http://localhost:8025  
+
+## QuickStart für Anwender
+
+1. **Login**  
+   Gehe auf `http://localhost:8080/login` und melde dich mit E-Mail/Passwort an.
+
+2. **Neues Protokoll anlegen**  
+   Klicke auf **„Neues Protokoll“** und fülle den Assistenten aus:  
+   - **Schritt 1:** Adresse, WE, Eigentümer, Hausverwaltung, Art (Einzug/Auszug/Zwischen)  
+   - **Schritt 2:** Räume (IST-Zustand, Geruch, WMZ), Fotos  
+   - **Schritt 3:** Zählerstände (WE + Allgemein)  
+   - **Schritt 4:** Schlüssel, Bank/Kaution, Kontakt, Einwilligungen (DSGVO)
+
+3. **Bearbeiten & Versionieren**  
+   Nach Abschluss wirst du direkt zu **/protocols/edit?id=…** geleitet.  
+   Änderungen erzeugen neue Versionen; Fotos werden pro Raum als Thumbnails gezeigt.
+
+4. **PDF & Versand**  
+   Am Ende der Detailseite: **PDF ansehen** oder **per E-Mail** an Eigentümer / HV / Mieter senden.  
+   Versand wird im Log protokolliert; signierte DocuSign-PDFs werden bevorzugt verwendet.
+
+5. **Statistiken**  
+   Unter **„Statistik“** (`/stats`) stehen Auswertungen bereit:  
+   - Fluktuation Haus & Wohnung (sortiert, mit Quote)  
+   - Ø Mietdauer & Ø Leerstand je Haus + globale Leerstandsquote  
+   - Einzüge vs. Auszüge nach Monat (Saisonalität)  
+   - Zähler-Δ (Mittelwerte) für Strom/Gas/Wasser  
+
+## Git-Workflow
+
+- Änderungen mit sinnvollen Commits dokumentieren  
+- Vor dem Push: `git fetch && git rebase origin/main`  
+- Bei Konflikten: auflösen → `git rebase --continue`  
+- **Notes.md** im Repo für technische Entscheidungen/ToDos nutzen
+
+## Lizenz
+
+Proprietär, © Handwertig GmbH
