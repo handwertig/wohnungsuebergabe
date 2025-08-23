@@ -1,21 +1,85 @@
-# v0.6.0 – Wizard/Editor Feinschliff, Rechtstexte & PDF, Versand/Status
+# Wohnungsübergabe – Entwicklernotizen
 
-## Neu
-- Wizard Schritt 1: Reihenfolge fix, Eigentümer (Dropdown + Inline) & Hausverwaltung, Labels (Einzugs-/Auszugs-/Zwischenprotokoll).
-- Editor: Adress-/Kontakt-/Bank-/Einwilligungs-Felder ergänzt, Raum-Foto-Uploads inkl. Thumbnails je Raum.
-- Rechtstexte: versionierbar (Datenschutz, Entsorgung, Marketing) in Einstellungen.
-- PDF-Export (Dompdf): CI-nahes Template, Speicherung je Version, Anzeige/Download.
-- Versand: PDF per SMTP an Eigentümer/Hausverwaltung/Mieter, Versandlog (email_log) + Status-Events (protocol_events).
-- UX: Übersichtsaccordion zeigt „Einheit <Nr>“, Typ-Badges, Login leitet auf /protocols.
+Dieses Dokument dient als Übersicht für Entwickler, Architekturentscheidungen und offene ToDos.
 
-## Migrationen
-- 011/012/013: owner_id/manager_id für protocols & drafts
-- 014: legal_texts (versioniert)
-- 015: pdf_path in protocol_versions
-- 016: protocol_events
-- 017: email_log
+---
 
-## Hinweise
-- SMTP in Einstellungen pflegen (Host/Port/Sicherheit/User/Pass/From).
-- Rechtstexte anpassen (neue Versionen bei Änderungen).
-- PDF unter storage/pdfs/<protocol_id>/vN.pdf; Uploads unter storage/uploads.
+## Architekturentscheidungen
+
+- **Backend:** PHP 8.3 mit PDO (MariaDB), ohne Framework → leichtgewichtig, transparent.
+- **Frontend:** Bootstrap 5, Flat-Theme, Dark-/Lightmode via Toggle.
+- **Routing:** Einfaches Switch-Case in `public/index.php`.
+- **DB:** MariaDB 11, Tabellen versioniert (Soft-Delete via `deleted_at`, Audit via `protocol_events`).
+- **PDF:** Dompdf (lokal), DocuSign-Signaturintegration (remote).
+- **Uploads:** Raum-Fotos im Verzeichnis `backend/storage/uploads`, Nginx-Alias `/uploads/`.
+- **Versand:** SMTP konfigurierbar via `.env`, lokal Mailpit.
+
+---
+
+## Aktuelle Features (Stand v0.7+)
+
+- Auth (Login, Logout, Passwort-Reset, Benutzerverwaltung)
+- Protokoll-Wizard (4 Schritte)
+- Protokoll-Editor mit Versionierung
+- Soft-Delete + Audit
+- Uploads (Raum-Fotos)
+- PDF-Export + Mail-Versand
+- Rechtstexte (Datenschutz, Einwilligungen) versioniert
+- Statistikseite (`/stats`) mit:
+  - Fluktuation Haus & Wohnung
+  - Ø Mietdauer
+  - Ø Leerstand
+  - Saisonale Spitzen
+  - Zähler-Analysen
+  - Qualitätsscore
+
+---
+
+## Offene ToDos / Backlog
+
+1. **PDF-Hardening**
+   - Logo + Corporate Design finalisieren
+   - Signaturfelder schöner platzieren
+   - Mehrsprachigkeit prüfen (DE/EN)
+
+2. **DocuSign**
+   - Vollintegration mit Callback (Webhook)
+   - Status in DB speichern
+   - PDF-Austausch automatisieren
+
+3. **UX-Feinschliff**
+   - Mobile Navigation optimieren
+   - Tooltips konsistenter einsetzen
+   - Autocomplete für Eigentümer / Hausverwaltungen
+
+4. **Validierung**
+   - Clientseitige Checks (IBAN, E-Mail, Pflichtfelder)
+   - Soft-Warnings (fehlende Zählerstände, Räume ohne Fotos)
+
+5. **Statistiken**
+   - Ø Mietdauer pro Haus verbessern (Tage exakter berechnen)
+   - Globale Leerstandsquote fertigstellen
+   - Weitere KPIs (Durchlaufzeit Wizard → Save)
+
+6. **Security**
+   - CSRF-Token pro Formular
+   - Session-Härtung (Secure, HttpOnly, SameSite)
+   - Logging von fehlgeschlagenen Logins
+
+---
+
+## Git-Workflow
+
+- Feature-Branches nutzen: `feature/...`
+- Commits klein & sprechend
+- Vor Push: `git fetch && git rebase origin/main`
+- Konflikte lösen → `git rebase --continue`
+- Push → `git push origin main`
+
+---
+
+## Release-Plan (v0.8 → v1.0)
+
+- v0.8: PDF-/UX-Hardening, Notes.md/Readme stabil
+- v0.9: DocuSign produktiv, Rechtstexte final
+- v1.0: Rollout produktiv bei Handwertig GmbH

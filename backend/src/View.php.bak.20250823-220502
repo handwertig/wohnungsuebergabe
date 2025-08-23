@@ -12,42 +12,48 @@ final class View {
     public static function render(string $title, string $bodyHtml): void {
         header('Content-Type: text/html; charset=utf-8');
 
-        // Custom CSS (Branding-Tab) – KEINE Farbvariablen mehr
-        $customCss = (string)Settings::get('custom_css','');
+        // Branding aus Settings
+        $bp  = Settings::get('brand_primary',  '#222357');
+        $bs  = Settings::get('brand_secondary','#e22278');
+        $css = (string)Settings::get('custom_css','');
 
-        // Logo ermitteln
-        $logoTag = '<img src="/images/logo.svg" alt="Logo" style="height:24px;width:auto">';
+        // Logo: versuche Datei aus Settings zu base64, sonst Fallback /images/logo.svg
         $logoPath = (string)Settings::get('pdf_logo_path','');
-        if ($logoPath !== '' && is_file($logoPath)) {
-            $ext  = strtolower((string)pathinfo($logoPath, PATHINFO_EXTENSION));
-            $mime = ($ext==='svg') ? 'image/svg+xml' : (($ext==='png') ? 'image/png' : (($ext==='jpg'||$ext==='jpeg') ? 'image/jpeg' : 'application/octet-stream'));
+        $logoTag  = '<span class="logo" style="width:22px;height:22px;background:var(--brand-primary);display:inline-block"></span>';
+        if ($logoPath && is_file($logoPath)) {
+            $ext  = strtolower(pathinfo($logoPath, PATHINFO_EXTENSION));
+            $mime = ($ext === 'svg') ? 'image/svg+xml' : ( ($ext === 'png') ? 'image/png' : (($ext==='jpg'||$ext==='jpeg')?'image/jpeg':'application/octet-stream') );
             $data = base64_encode((string)file_get_contents($logoPath));
-            if ($data !== false) {
-                $logoTag = '<img src="data:'.$mime.';base64,'.$data.'" alt="Logo" style="height:24px;width:auto">';
+            $logoTag = '<img src="data:'.$mime.';base64,'.$data.'" alt="Logo" style="height:24px;width:auto">';
+        } else {
+            // Fallback: public/images/logo.svg falls vorhanden
+            $fallback = __DIR__.'/../public/images/logo.svg';
+            if (is_file($fallback)) {
+                $data = base64_encode((string)file_get_contents($fallback));
+                $logoTag = '<img src="data:image/svg+xml;base64,'.$data.'" alt="Logo" style="height:24px;width:auto">';
             }
         }
 
-        // Flashes / Auth
-        $flashes  = Flash::pull();
+        // Flashes
+        $flashes = Flash::pull();
         $isLogged = Auth::user() !== null;
 
-        // HEAD
         echo '<!doctype html><html lang="de"><head><meta charset="utf-8">';
         echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
         echo '<title>'.self::h($title).'</title>';
         echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">';
         echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">';
         echo '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">';
-        echo '<link href="/assets/flat-theme.css" rel="stylesheet">';
-        if ($customCss !== '') echo '<style>'.$customCss.'</style>';
+        echo '<link href="/assets/flat-theme.css" rel="stylesheet">
+<link href="/assets/brand-override.css" rel="stylesheet">';
+        // Branding-Variablen + Custom CSS
+        echo '<style>:root{--bs-primary: '.self::h($bp).'; --brand-primary: '.self::h($bp).'; --brand-secondary: '.self::h($bs).';} '.$css.'</style>';
         echo '</head><body>';
 
-        // SHELL
+        // App-Shell: Sidebar + Topbar
         echo '<div class="kt-app">';
-
-        // Sidebar
         echo '<aside class="kt-aside d-print-none" id="kt-aside">';
-        echo '<div class="kt-brand">'.$logoTag.'</div>';
+        echo '';
         echo '<ul class="kt-nav">';
         echo '<li><a href="/protocols" class="'.(self::isActive('/protocols')?'active':'').'"><i class="bi bi-files"></i><span>Protokolle</span></a></li>';
         echo '<li><a href="/protocols/wizard/start"><i class="bi bi-plus-circle"></i><span>Neues Protokoll</span></a></li>';
@@ -55,10 +61,8 @@ final class View {
         echo '<li><a href="/settings" class="'.(self::isActive('/settings')?'active':'').'"><i class="bi bi-gear"></i><span>Einstellungen</span></a></li>';
         echo '</ul></aside>';
 
-        // Backdrop mobile
         echo '<div class="kt-aside-backdrop d-lg-none" id="kt-aside-backdrop"></div>';
 
-        // Topbar
         echo '<header class="kt-topbar d-print-none">';
         echo '<button class="btn btn-ghost d-lg-none" id="kt-aside-toggle" aria-label="Menü"><i class="bi bi-list"></i></button>';
         echo '<div class="ms-2 fw-semibold">'.self::h($title).'</div>';
@@ -67,7 +71,6 @@ final class View {
         if ($isLogged) echo '<a class="btn btn-outline-danger" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>';
         echo '</div></header>';
 
-        // Main
         echo '<main class="kt-main">';
         foreach ($flashes as $f) {
             $cls = ['success'=>'success','error'=>'danger','info'=>'info','warning'=>'warning'][$f['type']] ?? 'secondary';
@@ -78,7 +81,6 @@ final class View {
 
         echo '</div>'; // .kt-app
 
-        // Scripts
         echo '<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>';
         echo '<script src="/assets/ui-shell.js"></script>';
         echo '<script src="/assets/theme-toggle.js"></script>';

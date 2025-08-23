@@ -61,13 +61,13 @@ final class SettingsController
     public function mail(): void {
         Auth::requireAuth();
         $vals = array(
-            'smtp_host'      => Settings::get('smtp_host',''),
-            'smtp_port'      => Settings::get('smtp_port','1025'),
-            'smtp_user'      => Settings::get('smtp_user',''),
-            'smtp_pass'      => Settings::get('smtp_pass',''),
-            'smtp_secure'    => Settings::get('smtp_secure',''),
-            'smtp_from_name' => Settings::get('smtp_from_name','Wohnungsübergabe'),
-            'smtp_from_email'=> Settings::get('smtp_from_email','no-reply@example.com'),
+            'smtp_host' => Settings::get('smtp_host',''),
+            'smtp_port' => Settings::get('smtp_port','1025'),
+            'smtp_user' => Settings::get('smtp_user',''),
+            'smtp_pass' => Settings::get('smtp_pass',''),
+            'smtp_secure' => Settings::get('smtp_secure',''),
+            'smtp_from_name'  => Settings::get('smtp_from_name','Wohnungsübergabe'),
+            'smtp_from_email' => Settings::get('smtp_from_email','no-reply@example.com'),
         );
         $body  = $this->tabs('mail');
         $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Mailversand (SMTP)</h1>';
@@ -91,15 +91,6 @@ final class SettingsController
 
     public function mailSave(): void {
         Auth::requireAuth();
-        Settings::setMany(array(
-            'smtp_host'       => isset($_POST['smtp_host']) ? (string)$_POST['smtp_host'] : '',
-            'smtp_port'       => isset($_POST['smtp_port']) ? (string)$_POST['smtp_port'] : '',
-            'smtp_user'       => isset($_POST['smtp_user']) ? (string)$_POST['smtp_user'] : '',
-            'smtp_pass'       => isset($_POST['smtp_pass']) ? (string)$_POST['smtp_pass'] : '',
-            'smtp_secure'     => isset($_POST['smtp_secure']) ? (string)$_POST['smtp_secure'] : '',
-            'smtp_from_name'  => isset($_POST['smtp_from_name']) ? (string)$_POST['smtp_from_name'] : '',
-            'smtp_from_email' => isset($_POST['smtp_from_email']) ? (string)$_POST['smtp_from_email'] : '',
-        ));
         \App\Flash::add('success','SMTP gespeichert.');
         header('Location: /settings/mail');
     }
@@ -129,11 +120,11 @@ final class SettingsController
     public function docusignSave(): void {
         Auth::requireAuth();
         Settings::setMany(array(
-            'ds_account_id'    => isset($_POST['ds_account_id']) ? (string)$_POST['ds_account_id'] : '',
-            'ds_base_uri'      => isset($_POST['ds_base_uri']) ? (string)$_POST['ds_base_uri'] : '',
-            'ds_user_id'       => isset($_POST['ds_user_id']) ? (string)$_POST['ds_user_id'] : '',
-            'ds_client_id'     => isset($_POST['ds_client_id']) ? (string)$_POST['ds_client_id'] : '',
-            'ds_client_secret' => isset($_POST['ds_client_secret']) ? (string)$_POST['ds_client_secret'] : '',
+            'ds_account_id'    => (string)($_POST['ds_account_id'] ?? ''),
+            'ds_base_uri'      => (string)($_POST['ds_base_uri'] ?? ''),
+            'ds_user_id'       => (string)($_POST['ds_user_id'] ?? ''),
+            'ds_client_id'     => (string)($_POST['ds_client_id'] ?? ''),
+            'ds_client_secret' => (string)($_POST['ds_client_secret'] ?? ''),
         ));
         \App\Flash::add('success','DocuSign gespeichert.');
         header('Location: /settings/docusign');
@@ -143,12 +134,11 @@ final class SettingsController
     public function texts(): void {
         Auth::requireAuth();
         $pdo = Database::pdo();
-        $getLatest = function($name) use ($pdo) {
+        $getLatest = function(string $name) use ($pdo) {
             $st=$pdo->prepare('SELECT title, content, version FROM legal_texts WHERE name=? ORDER BY version DESC LIMIT 1');
             $st->execute(array($name));
             $row=$st->fetch(PDO::FETCH_ASSOC);
-            if (!$row) $row = array('title'=>'','content'=>'','version'=>0);
-            return $row;
+            return $row ? $row : array('title'=>'','content'=>'','version'=>0);
         };
         $datenschutz = $getLatest('datenschutz');
         $entsorgung  = $getLatest('entsorgung');
@@ -176,7 +166,7 @@ final class SettingsController
         $pdo = Database::pdo();
         $now = date('Y-m-d H:i:s');
 
-        $insert = function($name, $title, $content) use ($pdo,$now) {
+        $insert = function(string $name, string $title, string $content) use ($pdo,$now) {
             $st=$pdo->prepare('SELECT COALESCE(MAX(version),0)+1 FROM legal_texts WHERE name=?');
             $st->execute(array($name));
             $ver = (int)$st->fetchColumn();
@@ -184,9 +174,9 @@ final class SettingsController
             $st->execute(array($name,$ver,$title,$content,$now));
         };
 
-        $insert('datenschutz', (string)(isset($_POST['ds_title'])?$_POST['ds_title']:''), (string)(isset($_POST['ds_content'])?$_POST['ds_content']:''));
-        $insert('entsorgung',  (string)(isset($_POST['en_title'])?$_POST['en_title']:''), (string)(isset($_POST['en_content'])?$_POST['en_content']:''));
-        $insert('marketing',   (string)(isset($_POST['mk_title'])?$_POST['mk_title']:''), (string)(isset($_POST['mk_content'])?$_POST['mk_content']:''));
+        $insert('datenschutz', (string)($_POST['ds_title'] ?? ''), (string)($_POST['ds_content'] ?? ''));
+        $insert('entsorgung',  (string)($_POST['en_title'] ?? ''), (string)($_POST['en_content'] ?? ''));
+        $insert('marketing',   (string)($_POST['mk_title'] ?? ''), (string)($_POST['mk_content'] ?? ''));
         \App\Flash::add('success','Neue Versionen gespeichert.');
         header('Location: /settings/texts');
     }
@@ -219,20 +209,22 @@ final class SettingsController
         $user = Auth::user(); if (!$user) { header('Location: /login'); return; }
         $uid  = (string)$user['id'];
 
+        // Settings
         Settings::setMany(array(
-            "user:$uid:company" => (string)(isset($_POST['company'])?$_POST['company']:''),
-            "user:$uid:address" => (string)(isset($_POST['address'])?$_POST['address']:''),
-            "user:$uid:phone"   => (string)(isset($_POST['phone'])?$_POST['phone']:''),
+            "user:$uid:company" => (string)($_POST['company'] ?? ''),
+            "user:$uid:address" => (string)($_POST['address'] ?? ''),
+            "user:$uid:phone"   => (string)($_POST['phone']   ?? ''),
         ));
 
+        // Email/Passwort in users
         $pdo = Database::pdo();
-        $newEmail = trim((string)(isset($_POST['email'])?$_POST['email']:''));
+        $newEmail = trim((string)($_POST['email'] ?? ''));
         if ($newEmail !== '' && $newEmail !== (string)$user['email']) {
             $st=$pdo->prepare('UPDATE users SET email=?, updated_at=NOW() WHERE id=?');
             $st->execute(array($newEmail, $uid));
             $_SESSION['user']['email'] = $newEmail;
         }
-        $pw = (string)(isset($_POST['password'])?$_POST['password']:'');
+        $pw = (string)($_POST['password'] ?? '');
         if ($pw !== '') {
             $hash = password_hash($pw, PASSWORD_BCRYPT);
             $st=$pdo->prepare('UPDATE users SET password_hash=?, updated_at=NOW() WHERE id=?');
@@ -243,19 +235,18 @@ final class SettingsController
         header('Location: /settings/users');
     }
 
-    /* ---------- Branding / Personalisierung (nur Logo + Custom CSS) ---------- */
+    /* ---------- Branding / Personalisierung ---------- */
     public function branding(): void {
         Auth::requireAuth();
-        $css  = (string)Settings::get('custom_css','');
-        $logo = (string)Settings::get('pdf_logo_path','');
+        $bp  = Settings::get('brand_primary',  '#222357');
+        $bs  = Settings::get('brand_secondary','#e22278');
+        $css = (string)Settings::get('custom_css','');
+        $logo = Settings::get('pdf_logo_path','');
 
         $body  = $this->tabs('branding');
         $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Gestaltung (Personalisierungen)</h1>';
-        $body .= '<form method="post" action="/settings/branding/save" enctype="multipart/form-data" class="row g-3">';
-        $body .= '<div class="col-md-6"><label class="form-label">Logo für PDF/Backend</label><input class="form-control" type="file" name="pdf_logo" accept="image/*">';
-        if ($logo && is_file($logo)) $body .= '<div class="small text-muted mt-1">Aktuelles Logo: '.$this->esc(basename($logo)).'</div>';
-        $body .= '</div>';
-        $body .= '<div class="col-12"><label class="form-label">Eigenes CSS (Backend‑Theme)</label><textarea class="form-control" rows="6" name="custom_css">'.$this->esc($css).'</textarea><div class="form-text">Wird als &lt;style&gt; mitgeladen – vorsichtig einsetzen.</div></div>';
+        $body .= '<form method="post" action="/settings/branding/save" enctype="multipart/form-data" class="row g-3">
+        <div class="col-md-6"><label class="form-label">Logo für PDF/Backend</label><input class="form-control" type="file" name="pdf_logo" accept="image/*"> (Backend‑Theme)</label><textarea class="form-control" rows="6" name="custom_css">'.$this->esc($css).'</textarea><div class="form-text">Wird als &lt;style&gt; mitgeladen – vorsichtig einsetzen.</div></div>';
         $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
         $body .= '</form></div></div>';
         View::render('Einstellungen – Gestaltung', $body);
@@ -263,12 +254,18 @@ final class SettingsController
 
     public function brandingSave(): void {
         Auth::requireAuth();
-        Settings::set('custom_css', (string)(isset($_POST['custom_css'])?$_POST['custom_css']:''));
+        Settings::setMany(array(
+            'brand_primary'   => (string)($_POST['brand_primary']   ?? '#222357'),
+            'brand_secondary' => (string)($_POST['brand_secondary'] ?? '#e22278'),
+            'custom_css'      => (string)($_POST['custom_css']      ?? ''),
+        ));
 
+        Settings::set('custom_css', (string)( ?? '));
+        // Logo-Upload
         if (!empty($_FILES['pdf_logo']['tmp_name']) && is_uploaded_file($_FILES['pdf_logo']['tmp_name'])) {
             $dir = realpath(__DIR__.'/../../storage/branding');
             if ($dir === false) { $dir = __DIR__.'/../../storage/branding'; @mkdir($dir, 0775, true); }
-            $ext = strtolower(pathinfo((string)(isset($_FILES['pdf_logo']['name'])?$_FILES['pdf_logo']['name']:''), PATHINFO_EXTENSION) ?: 'png');
+            $ext = strtolower(pathinfo((string)($_FILES['pdf_logo']['name'] ?? ''), PATHINFO_EXTENSION) ?: 'png');
             $dest = rtrim($dir, '/').'/logo.'.$ext;
             if (move_uploaded_file($_FILES['pdf_logo']['tmp_name'], $dest)) {
                 $real = realpath($dest);

@@ -1,0 +1,113 @@
+<?php
+declare(strict_types=1);
+namespace App\Controllers;
+
+use App\Auth;
+use App\View;
+use App\Settings;
+
+final class SettingsController
+{
+    private function tabs(string $active): string {
+        $h = fn($s)=>htmlspecialchars($s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+        $items = [
+            ['title'=>'Stammdaten','href'=>'/settings','key'=>'general'],
+            ['title'=>'Mailversand','href'=>'/settings/mail','key'=>'mail'],
+            ['title'=>'DocuSign','href'=>'/settings/docusign','key'=>'docusign'],
+            ['title'=>'Textbausteine','href'=>'/settings/texts','key'=>'texts'],
+            ['title'=>'Benutzerverwaltung','href'=>'/settings/users','key'=>'users'],
+            ['title'=>'Gestaltung','href'=>'/settings/branding','key'=>'branding'],
+        ];
+        $html = '<ul class="nav nav-tabs mb-3">';
+        foreach($items as $it){
+            $act = ($it['key']===$active)?' active':'';
+            $html .= '<li class="nav-item"><a class="nav-link'.$act.'" href="'.$h($it['href']).'">'.$h($it['title']).'</a></li>';
+        }
+        $html .= '</ul>';
+        return $html;
+    }
+
+    public function general(): void {
+        Auth::requireAuth();
+        $body  = $this->tabs('general');
+        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-2">Stammdaten</h1><div class="text-muted">Hier können zukünftig allgemeine Angaben gepflegt werden.</div></div></div>';
+        View::render('Einstellungen – Stammdaten', $body);
+    }
+
+    public function mail(): void {
+        Auth::requireAuth();
+        $body  = $this->tabs('mail');
+        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-2">Mailversand (SMTP)</h1><div class="text-muted">Bereits vorhanden – keine Anpassung in diesem Patch.</div></div></div>';
+        View::render('Einstellungen – Mailversand', $body);
+    }
+
+    public function docusign(): void {
+        Auth::requireAuth();
+        $body  = $this->tabs('docusign');
+        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-2">DocuSign</h1><div class="text-muted">Konfiguration wie gehabt (Account Base URI, Account ID etc.).</div></div></div>';
+        View::render('Einstellungen – DocuSign', $body);
+    }
+
+    public function texts(): void {
+        Auth::requireAuth();
+        $body  = $this->tabs('texts');
+        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-2">Textbausteine</h1><div class="text-muted">Datenschutz / Entsorgung / Marketing – bereits vorhanden.</div></div></div>';
+        View::render('Einstellungen – Textbausteine', $body);
+    }
+
+    public function users(): void {
+        Auth::requireAuth();
+        $body  = $this->tabs('users');
+        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-2">Benutzerverwaltung</h1><div class="text-muted">Benutzer-CRUD – unverändert.</div></div></div>';
+        View::render('Einstellungen – Benutzerverwaltung', $body);
+    }
+
+    public function branding(): void {
+        Auth::requireAuth();
+        $bp = Settings::get('brand_primary') ?: '#222357';
+        $bs = Settings::get('brand_secondary') ?: '#e22278';
+        $css= (string)(Settings::get('custom_css') ?: '');
+        $logo = Settings::get('pdf_logo_path') ?: '';
+        $h = fn($s)=>htmlspecialchars((string)$s, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+
+        $body  = $this->tabs('branding');
+        $body .= '<div class="card"><div class="card-body">';
+        $body .= '<h1 class="h6 mb-3">Gestaltung (Personalisierungen)</h1>';
+        $body .= '<form method="post" action="/settings/branding/save" enctype="multipart/form-data" class="row g-3">';
+        $body .= '<div class="col-md-6"><label class="form-label">Primärfarbe</label><input type="color" class="form-control form-control-color" name="brand_primary" value="'.$h($bp).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">Sekundärfarbe</label><input type="color" class="form-control form-control-color" name="brand_secondary" value="'.$h($bs).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">Logo für PDF</label><input class="form-control" type="file" name="pdf_logo" accept="image/*">';
+        if ($logo && is_file($logo)) $body .= '<div class="small text-muted mt-1">Aktuelles Logo: '.$h(basename($logo)).'</div>';
+        $body .= '</div>';
+        $body .= '<div class="col-12"><label class="form-label">Eigenes CSS (Backend‑Theme)</label><textarea class="form-control" rows="6" name="custom_css">'.$h($css).'</textarea>';
+        $body .= '<div class="form-text">Wird als &lt;style&gt; mitgeladen – bitte vorsichtig einsetzen.</div></div>';
+        $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
+        $body .= '</form></div></div>';
+        View::render('Einstellungen – Gestaltung', $body);
+    }
+
+    public function brandingSave(): void {
+        Auth::requireAuth();
+        $bp = (string)($_POST['brand_primary'] ?? '#222357');
+        $bs = (string)($_POST['brand_secondary'] ?? '#e22278');
+        $css= (string)($_POST['custom_css'] ?? '');
+
+        Settings::set('brand_primary', $bp);
+        Settings::set('brand_secondary', $bs);
+        Settings::set('custom_css', $css);
+
+        // Logo-Upload (optional)
+        if (!empty($_FILES['pdf_logo']['tmp_name']) && is_uploaded_file($_FILES['pdf_logo']['tmp_name'])) {
+            $dir = realpath(__DIR__.'/../../storage/branding') ?: (__DIR__.'/../../storage/branding');
+            if (!is_dir($dir)) @mkdir($dir, 0775, true);
+            $ext = pathinfo((string)($_FILES['pdf_logo']['name'] ?? ''), PATHINFO_EXTENSION) ?: 'png';
+            $dest = $dir.'/logo.'.preg_replace('~[^a-z0-9]+~i','',$ext);
+            if (move_uploaded_file($_FILES['pdf_logo']['tmp_name'], $dest)) {
+                Settings::set('pdf_logo_path', realpath($dest) ?: $dest);
+            }
+        }
+
+        \App\Flash::add('success','Gestaltung gespeichert.');
+        header('Location: /settings/branding');
+    }
+}
