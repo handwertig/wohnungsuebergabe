@@ -48,7 +48,8 @@ final class View {
             echo '<aside class="kt-aside d-print-none" id="kt-aside">';
             echo '  <div class="kt-brand"><span class="logo"></span><span>Wohnungsübergabe</span></div>';
             echo '  <ul class="kt-nav">';
-            echo '    <li><a href="/protocols" class="'.(self::active('/protocols')?'active':'').'"><i class="bi bi-files"></i><span>Protokolle</span></a></li>';
+            echo '    <li><a href="/protocols" class="'.(self::active('/protocols')?'active':'').'"><i class="bi bi-files"></i><span>Protokolle</span></a></li>
+        <li><a href="/stats"><i class="bi bi-bar-chart"></i><span>Statistik</span></a></li>';
             echo '    <li><a href="/protocols/wizard/start"><i class="bi bi-plus-circle"></i><span>Neues Protokoll</span></a></li>';
             echo '    <li><a href="/settings" class="'.(self::active('/settings')?'active':'').'"><i class="bi bi-gear"></i><span>Einstellungen</span></a></li>';
             echo '  </ul>';

@@ -112,7 +112,7 @@ final class ProtocolWizardController
             foreach ($rooms as $key=>$r) {
                 $rk = htmlspecialchars((string)$key);
                 $html .= '<div class="card my-3"><div class="card-body row g-3">';
-                $html .= '<div class="col-md-6"><label class="form-label">Raumname *</label><input class="form-control" name="rooms['.$rk.'][name]" list="room-presets" list="room-presets" value="'.htmlspecialchars((string)($r['name'] ?? '')).'"></div>';
+                $html .= '<div class="col-md-6"><label class="form-label">Raumname *</label><input class="form-control" name="rooms['.$rk.'][name]" list="room-presets" value="'.htmlspecialchars((string)($r['name'] ?? '')).'"></div>';
                 $html .= '<div class="col-md-6"><label class="form-label">Geruch</label><input class="form-control" name="rooms['.$rk.'][smell]" value="'.htmlspecialchars((string)($r['smell'] ?? '')).'"><div class="form-text">Hinweis: Gerüche sachlich dokumentieren (Art, Intensität, Ursache).</div></div>';
                 $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" name="rooms['.$rk.'][state]" rows="3">'.htmlspecialchars((string)($r['state'] ?? '')).'</textarea><div class="form-text">Hinweis: Vollständig & objektiv beschreiben; positive wie negative Feststellungen präzise notieren.</div></div>';
                 $html .= '<div class="col-md-3 form-check ms-2"><input class="form-check-input" type="checkbox" name="rooms['.$rk.'][accepted]" '.(!empty($r['accepted'])?'checked':'').'> <label class="form-check-label">Abnahme erfolgt</label></div>';

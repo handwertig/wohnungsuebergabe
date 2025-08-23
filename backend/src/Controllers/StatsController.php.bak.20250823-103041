@@ -1,0 +1,106 @@
+<?php
+declare(strict_types=1);
+namespace App\Controllers;
+
+use App\Auth;
+use App\Database;
+use App\View;
+use PDO;
+
+final class StatsController {
+  public function index(): void {
+    Auth::requireAuth();
+    $pdo  = Database::pdo();
+    $year = (int)($_GET['year'] ?? (int)date('Y'));
+    if ($year < 2000 || $year > 2100) $year = (int)date('Y');
+
+    $st = $pdo->query("
+      SELECT p.id, p.unit_id, p.type, p.payload, p.created_at,
+             u.label AS unit_label, o.id AS object_id, o.city, o.postal_code, o.street, o.house_no
+      FROM protocols p
+      JOIN units u ON u.id=p.unit_id
+      JOIN objects o ON o.id=u.object_id
+      WHERE p.deleted_at IS NULL
+      ORDER BY o.city,o.street,o.house_no,u.label,p.created_at
+    ");
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    // Zähler für Protokollarten
+    $countEinzug=0; $countAuszug=0; $countZwischen=0;
+    foreach($rows as $r){
+      if($r['type']==='einzug') $countEinzug++;
+      if($r['type']==='auszug') $countAuszug++;
+      if($r['type']==='zwischen') $countZwischen++;
+    }
+
+    // Aggregationen nach Einheit
+    $payload = fn($r) => (json_decode((string)($r['payload'] ?? '{}'), true) ?: []);
+    $tsOf    = fn(array $p,$c)=> (($t=(string)($p['timestamp']??'')) ? strtotime(str_replace('T',' ',$t)) : strtotime((string)$c));
+
+    $byUnit=[]; foreach($rows as $r){ $byUnit[$r['unit_id']][]=['type'=>$r['type'],'ts'=>$tsOf($payload($r),$r['created_at'])]; }
+
+    $durDays=[]; $leerQuote=[];
+    foreach($byUnit as $evs){
+      usort($evs,fn($a,$b)=>$a['ts']<=>$b['ts']);
+      $einTs=null; $ausTs=null;
+      foreach($evs as $ev){
+        if($ev['type']==='einzug'){ 
+          $einTs=$ev['ts']; 
+          if($ausTs){ 
+            $leer=($einTs-$ausTs)/86400; 
+            if($leer>0 && $durDays){ // Bezug: letzter Mietzeitraum
+              $lastDur=end($durDays);
+              $q= round($leer/($lastDur+$leer)*100,1);
+              $leerQuote[]=$q;
+            }
+            $ausTs=null;
+          }
+        }
+        if($ev['type']==='auszug'){ 
+          if($einTs){ $durDays[]=max(0,(int)(($ev['ts']-$einTs)/86400)); $einTs=null; }
+          $ausTs=$ev['ts'];
+        }
+      }
+    }
+
+    $avgDur = $durDays? round(array_sum($durDays)/count($durDays),1): null;
+    $avgLeer = $leerQuote? round(array_sum($leerQuote)/count($leerQuote),1): null;
+
+    // ---- Render ----
+    ob_start(); ?>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="h4 mb-0">Statistik</h1>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <div class="card"><div class="card-body">
+          <div class="text-muted small mb-1">Einzugsprotokolle</div>
+          <div class="display-6"><?= (int)$countEinzug ?></div>
+        </div></div>
+      </div>
+      <div class="col-md-3">
+        <div class="card"><div class="card-body">
+          <div class="text-muted small mb-1">Auszugsprotokolle</div>
+          <div class="display-6"><?= (int)$countAuszug ?></div>
+        </div></div>
+      </div>
+      <div class="col-md-3">
+        <div class="card"><div class="card-body">
+          <div class="text-muted small mb-1">Zwischenprotokolle</div>
+          <div class="display-6"><?= (int)$countZwischen ?></div>
+        </div></div>
+      </div>
+      <div class="col-md-3">
+        <div class="card"><div class="card-body">
+          <div class="text-muted small mb-1">Ø Mietdauer</div>
+          <div class="display-6"><?= $avgDur!==null? $avgDur.' Tage':'—' ?></div>
+          <div class="text-muted small">Ø Leerstandsquote: <?= $avgLeer!==null? $avgLeer.'%':'—' ?></div>
+        </div></div>
+      </div>
+    </div>
+
+    <?php
+    View::render('Statistik', ob_get_clean());
+  }
+}

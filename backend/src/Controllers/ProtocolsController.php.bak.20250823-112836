@@ -255,12 +255,20 @@ final class ProtocolsController
 
         // ---- Tab: Räume (bestehend + Fotos) ----
         $html .= '<div class="tab-pane fade" id="tab-raeume">';
-        $html .= '<div class="d-flex justify-content-between align-items-center mb-2"><h6 class="mb-0">Räume</h6><button class="btn btn-sm btn-outline-primary" id="add-room-btn">+ Raum</button></div>';$html .= '<div id="rooms-wrap">';
+        $html .= '<div class="d-flex justify-content-between align-items-center mb-2"><h6 class="mb-0">Räume</h6><button class="btn btn-sm btn-outline-primary" id="add-room-btn">+ Raum</button></div>';
+<div class="small text-muted mb-2">Tipp: vordefinierte Bezeichnungen über die Vorschlagsliste auswählen.</div>
+<datalist id="room-presets">
+  <option>Schlafzimmer</option><option>Wohnzimmer</option><option>Küche</option><option>Bad</option>
+  <option>WC</option><option>Kinderzimmer</option><option>Arbeitszimmer</option><option>Studio</option>
+  <option>Flur</option><option>Keller</option><option>Abstellraum</option><option>Balkon</option>
+  <option>Terrasse</option><option>Garage</option><option>Stellplatz</option>
+</datalist>
+        $html .= '<div id="rooms-wrap">';
         foreach ($rooms as $r) {
             $rk = (string)($r['key'] ?? ('r'.substr(sha1((string)($r['name'] ?? '').mt_rand()),0,6)));
             $html .= '<div class="card mb-3"><div class="card-body"><div class="row g-3">';
             $html .= '<input type="hidden" name="rooms['.$h($rk).'][key]" value="'.$h($rk).'">';
-            $html .= '<div class="col-md-4"><label class="form-label">Raumname</label><input class="form-control" name="rooms['.$h($rk).'][name]" list="room-presets" list="room-presets" value="'.$h($r['name'] ?? '').'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">Raumname</label><input class="form-control" name="rooms['.$h($rk).'][name]" list="room-presets" value="'.$h($r['name'] ?? '').'"></div>';
             $html .= '<div class="col-md-4"><label class="form-label">Geruch</label><input class="form-control" name="rooms['.$h($rk).'][smell]" value="'.$h($r['smell'] ?? '').'"><div class="form-text">Hinweis: Gerüche sachlich dokumentieren (Art, Intensität, Ursache).</div></div>';
             $html .= '<div class="col-md-4 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" name="rooms['.$h($rk).'][accepted]" '.(!empty($r['accepted'])?'checked':'').'> <label class="form-check-label">Abnahme erfolgt</label></div></div>';
             $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" rows="3" name="rooms['.$h($rk).'][state]">'.$h($r['state'] ?? '').'</textarea><div class="form-text">Hinweis: Vollständig & objektiv beschreiben; positive wie negative Feststellungen präzise notieren.</div></div>';
@@ -282,7 +290,7 @@ final class ProtocolsController
         // Template für neue Räume
         $html .= '<template id="room-template"><div class="card mb-3"><div class="card-body"><div class="row g-3">';
         $html .= '<input type="hidden" name="rooms[__IDX__][key]" value="__IDX__">';
-        $html .= '<div class="col-md-4"><label class="form-label">Raumname</label><input class="form-control" name="rooms[__IDX__][name]" list="room-presets" list="room-presets"></div>';
+        $html .= '<div class="col-md-4"><label class="form-label">Raumname</label><input class="form-control" name="rooms[__IDX__][name]" list="room-presets"></div>';
         $html .= '<div class="col-md-4"><label class="form-label">Geruch</label><input class="form-control" name="rooms[__IDX__][smell]"><div class="form-text">Hinweis: Gerüche sachlich dokumentieren (Art, Intensität, Ursache).</div></div>';
         $html .= '<div class="col-md-4 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" name="rooms[__IDX__][accepted]"> <label class="form-check-label">Abnahme erfolgt</label></div></div>';
         $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" rows="3" name="rooms[__IDX__][state]"></textarea><div class="form-text">Hinweis: Vollständig & objektiv beschreiben; positive wie negative Feststellungen präzise notieren.</div></div>';
@@ -312,7 +320,13 @@ final class ProtocolsController
 
         // ---- Tab: Schlüssel & Meta ----
         $html .= '<div class="tab-pane fade" id="tab-schluessel">';
-        $html .= '<h6>Schlüssel</h6><div id="keys-wrap">';$i=0; foreach ($keys as $k) { $i++;
+        $html .= '<h6>Schlüssel</h6><div id="keys-wrap">';
+<div class="small text-muted mb-2">Tipp: Bezeichnung aus der Liste wählen; bei „Sonstige Schlüssel“ bitte eine Beschreibung ergänzen.</div>
+<datalist id="key-presets">
+  <option>Hausschlüssel</option><option>Wohnungsschlüssel</option><option>Briefkastenschlüssel</option>
+  <option>Kellerschlüssel</option><option>Garagenschlüssel</option><option>Sonstige Schlüssel</option>
+</datalist>
+        $i=0; foreach ($keys as $k) { $i++;
             $html .= '<div class="row g-2 align-items-end mb-2">';
             $html .= '<div class="col-md-5"><label class="form-label">Bezeichnung</label><input class="form-control" name="keys['.$i.'][label]" value="'.$h($k['label'] ?? '').'"></div>';
             $html .= '<div class="col-md-3"><label class="form-label">Anzahl</label><input type="number" min="0" class="form-control" name="keys['.$i.'][qty]" value="'.$h($k['qty'] ?? '0').'"></div>';

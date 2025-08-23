@@ -23,6 +23,7 @@ use App\Controllers\ProtocolWizardController;
 
 use App\Controllers\SettingsController;
 use App\Controllers\StatsController;
+use App\Controllers\StatsController;
 use App\Controllers\DocusignWebhookController;
 use App\Controllers\SignaturesController;
 use App\Controllers\DocusignController;
@@ -118,7 +119,6 @@ switch ($path) {
     // DocuSign (Stub)
     case '/docusign/send': Auth::requireAuth(); (new DocusignController())->send(); break;
 
-    case '/stats': Auth::requireAuth(); (new \App\Controllers\StatsController())->index(); break;
     default:
         http_response_code(404);
         header('Content-Type: application/json');

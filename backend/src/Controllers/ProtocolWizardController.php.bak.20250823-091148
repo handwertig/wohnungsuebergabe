@@ -108,11 +108,12 @@ final class ProtocolWizardController
 
         if ($step === 2) {
             $rooms = $data['rooms'] ?? [];
-            $html .= '<div class="d-flex justify-content-between"><h2 class="h6">Räume</h2><button class="btn btn-sm btn-outline-primary" name="add_room" value="1">Raum hinzufügen</button></div>';if (!$rooms) $html .= '<p class="text-muted">Noch keine Räume – „Raum hinzufügen“.</p>';
+            $html .= '<div class="d-flex justify-content-between"><h2 class="h6">Räume</h2><button class="btn btn-sm btn-outline-primary" name="add_room" value="1">Raum hinzufügen</button></div>';
+            if (!$rooms) $html .= '<p class="text-muted">Noch keine Räume – „Raum hinzufügen“.</p>';
             foreach ($rooms as $key=>$r) {
                 $rk = htmlspecialchars((string)$key);
                 $html .= '<div class="card my-3"><div class="card-body row g-3">';
-                $html .= '<div class="col-md-6"><label class="form-label">Raumname *</label><input class="form-control" name="rooms['.$rk.'][name]" list="room-presets" list="room-presets" value="'.htmlspecialchars((string)($r['name'] ?? '')).'"></div>';
+                $html .= '<div class="col-md-6"><label class="form-label">Raumname *</label><input class="form-control" name="rooms['.$rk.'][name]" value="'.htmlspecialchars((string)($r['name'] ?? '')).'"></div>';
                 $html .= '<div class="col-md-6"><label class="form-label">Geruch</label><input class="form-control" name="rooms['.$rk.'][smell]" value="'.htmlspecialchars((string)($r['smell'] ?? '')).'"><div class="form-text">Hinweis: Gerüche sachlich dokumentieren (Art, Intensität, Ursache).</div></div>';
                 $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" name="rooms['.$rk.'][state]" rows="3">'.htmlspecialchars((string)($r['state'] ?? '')).'</textarea><div class="form-text">Hinweis: Vollständig & objektiv beschreiben; positive wie negative Feststellungen präzise notieren.</div></div>';
                 $html .= '<div class="col-md-3 form-check ms-2"><input class="form-check-input" type="checkbox" name="rooms['.$rk.'][accepted]" '.(!empty($r['accepted'])?'checked':'').'> <label class="form-check-label">Abnahme erfolgt</label></div>';
@@ -153,7 +154,8 @@ final class ProtocolWizardController
                 'consents'=>['privacy'=>false,'marketing'=>false,'disposal'=>false],
                 'third_attendee'=>''
             ];
-            $html .= '<h2 class="h6 mb-3">Schlüssel</h2><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Bezeichnung</th><th>Anzahl</th><th>Nr.</th><th></th></tr></thead><tbody>';if (!$keys) { $html .= '<tr><td colspan="4" class="text-muted">Noch keine Schlüssel – „+ Schlüssel“ klicken.</td></tr>'; }
+            $html .= '<h2 class="h6 mb-3">Schlüssel</h2><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Bezeichnung</th><th>Anzahl</th><th>Nr.</th><th></th></tr></thead><tbody>';
+            if (!$keys) { $html .= '<tr><td colspan="4" class="text-muted">Noch keine Schlüssel – „+ Schlüssel“ klicken.</td></tr>'; }
             foreach ($keys as $i=>$k) {
                 $html .= '<tr><td><input class="form-control" name="keys['.$i.'][label]" value="'.htmlspecialchars((string)($k['label'] ?? '')).'"></td>';
                 $html .= '<td><input class="form-control" type="number" min="0" name="keys['.$i.'][qty]" value="'.htmlspecialchars((string)($k['qty'] ?? '0')).'"></td>';
@@ -461,12 +463,9 @@ final class ProtocolWizardController
         $data = json_decode($d['data'] ?? '{}', true) ?: [];
 
         // Minimalcheck
-        // Minimalcheck: Draft muss unit_id, type, tenant_name haben (aus Schritt 1)
-        if (empty($d['unit_id']) || empty($d['type']) || empty($d['tenant_name'])) {
-            Flash::add('error','Bitte Schritt 1 vervollständigen.');
-            header('Location: /protocols/wizard?step=1&draft='.$draft);
-            return;
-        }
+        $req = Validation::required(['unit_id'=>$d['unit_id'] ?? '','type'=>$d['type'] ?? '','tenant_name'=>$d['tenant_name'] ?? ''], ['unit_id','type','tenant_name']);
+        if ($req) { Flash::add('error','Bitte Schritt 1 vervollständigen.'); header('Location: /protocols/wizard?step=1&draft='.$draft); return; }
+
         // Protokoll speichern
         $pid = $this->uuid($pdo);
         $pdo->prepare('INSERT INTO protocols (id,unit_id,type,tenant_name,payload,owner_id,manager_id,created_at) VALUES (?,?,?,?,?,?,?,NOW())')

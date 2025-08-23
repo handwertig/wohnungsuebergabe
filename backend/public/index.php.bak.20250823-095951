@@ -118,7 +118,6 @@ switch ($path) {
     // DocuSign (Stub)
     case '/docusign/send': Auth::requireAuth(); (new DocusignController())->send(); break;
 
-    case '/stats': Auth::requireAuth(); (new \App\Controllers\StatsController())->index(); break;
     default:
         http_response_code(404);
         header('Content-Type: application/json');
