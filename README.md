@@ -7,6 +7,9 @@ Entwickelt für Projektentwickler, Hausverwaltungen und Eigentümer, ersetzt sie
 ---
 
 ## Features
+- Such- & Filterfunktion in der Protokoll-Übersicht (Volltext, Art, Zeitraum)
+- Gruppierte Darstellung: Haus → Einheit → Protokolle (Akkordeon)
+- DocuSign-Platzhalter im Wizard (Schritt 4) + Dritte Person
 - **Protokoll-Wizard** für Einzugs-, Auszugs- und Zwischenprotokolle (Schritt-für-Schritt)
 - **Objekt-/Wohnungsverwaltung**: Adresse, Wohneinheit, Versionierung
 - **Mieterangaben** inkl. Bankverbindung, neue Meldeadresse, Kontaktdaten

@@ -6,25 +6,24 @@ namespace App\Controllers;
 use App\Auth;
 use App\Database;
 use App\Flash;
-use App\Validation;
 use App\View;
-use App\AuditLogger;
 use PDO;
 
 final class ProtocolWizardController
 {
-    /** Schritt 0: Draft anlegen und auf Schritt 1 leiten */
+    private function h($v){ return htmlspecialchars((string)$v, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
+
     public function start(): void
     {
         Auth::requireAuth();
         $pdo = Database::pdo();
-        $id  = $this->uuid($pdo);
-        $pdo->prepare("INSERT INTO protocol_drafts (id,data,created_by,created_at) VALUES (?,?,?,NOW())")
-            ->execute([$id, json_encode(['rooms'=>[],'meters'=>[],'keys'=>[]], JSON_UNESCAPED_UNICODE), (Auth::user()['email'] ?? 'system')]);
-        header('Location: /protocols/wizard?step=1&draft='.$id); exit;
+        $id  = (string)$pdo->query('SELECT UUID()')->fetchColumn();
+        $empty = ['rooms'=>[],'meters'=>[],'keys'=>[],'timestamp'=>''];
+        $pdo->prepare("INSERT INTO protocol_drafts (id,data,status,created_at) VALUES (?,?, 'draft', NOW())")
+            ->execute([$id, json_encode($empty, JSON_UNESCAPED_UNICODE)]);
+        header('Location: /protocols/wizard?step=1&draft='.$id);
     }
 
-    /** GET: Schritt anzeigen */
     public function step(): void
     {
         Auth::requireAuth();
@@ -32,204 +31,202 @@ final class ProtocolWizardController
         $step  = max(1, min(4, (int)($_GET['step'] ?? 1)));
         $draft = (string)($_GET['draft'] ?? '');
 
-        $d = $this->loadDraft($pdo, $draft);
-        if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
-        $data = json_decode($d['data'] ?? '{}', true) ?: [];
+        $st=$pdo->prepare("SELECT * FROM protocol_drafts WHERE id=? AND status='draft'");
+        $st->execute([$draft]); $d=$st->fetch(PDO::FETCH_ASSOC);
+        if(!$d){ Flash::add('error','Entwurf nicht gefunden.'); header('Location:/protocols'); return; }
+        $data = json_decode((string)($d['data']??'{}'), true) ?: [];
 
-        // Stammdaten (Schritt 1)
         $owners   = $pdo->query("SELECT id,name,company FROM owners WHERE deleted_at IS NULL ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
         $managers = $pdo->query("SELECT id,name,company FROM managers ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 
-        // Datenschutzerklärung (aktuellste Version) für Schritt 4
-        $ltStmt = $pdo->prepare("SELECT title, content, version FROM legal_texts WHERE name=? ORDER BY version DESC LIMIT 1");
-        $ltStmt->execute(['datenschutz']);
-        $legalPrivacy = $ltStmt->fetch(PDO::FETCH_ASSOC) ?: ['title'=>'Datenschutzerklärung','content'=>'','version'=>0];
+        // Rechtstexte-Helper (für Schritt 4)
+        $getLatest = function(string $name) use ($pdo){
+            $s=$pdo->prepare("SELECT title, content, version FROM legal_texts WHERE name=? ORDER BY version DESC LIMIT 1");
+            $s->execute([$name]); $r=$s->fetch(PDO::FETCH_ASSOC);
+            return $r ?: ['title'=>'','content'=>'','version'=>0];
+        };
 
-        $html  = '<div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h4 mb-0">Übergabeprotokoll – Schritt '.$step.'/4</h1>';
-        $html .= '<div class="small text-muted">Entwurf: '.htmlspecialchars($draft).'</div></div>';
-        $html .= '<div class="progress mb-3"><div class="progress-bar" role="progressbar" style="width:'.($step*25).'%"></div></div>';
-        $html .= '<form method="post" action="/protocols/wizard/save?step='.$step.'&draft='.$draft.'" enctype="multipart/form-data">';
+        $html  = '<h1 class="h4 mb-3">Übergabeprotokoll – Schritt '.$step.'/4</h1>';
+        $html .= '<form method="post" action="/protocols/wizard/save?step='.$step.'&draft='.$this->h($draft).'" enctype="multipart/form-data">';
 
-        if ($step === 1) {
+        /* ------------------ Schritt 1: Adresse/Kopf/Eigentümer/HV ------------------ */
+        if ($step===1) {
+            $addr = (array)($data['address'] ?? ['city'=>'','postal_code'=>'','street'=>'','house_no'=>'','unit_label'=>'','floor'=>'']);
+            $typ  = (string)($d['type'] ?? 'einzug');
+
             // Adresse & WE
-            $addr = $data['address'] ?? ['city'=>'','postal_code'=>'','street'=>'','house_no'=>'','unit_label'=>'','floor'=>''];
             $html .= '<div class="card mb-3"><div class="card-body"><h2 class="h6 mb-3">Adresse & Wohneinheit</h2><div class="row g-3">';
-            $html .= '<div class="col-md-5"><label class="form-label">Ort *</label><input class="form-control" name="address[city]" value="'.htmlspecialchars((string)$addr['city']).'"></div>';
-            $html .= '<div class="col-md-2"><label class="form-label">PLZ</label><input class="form-control" name="address[postal_code]" value="'.htmlspecialchars((string)$addr['postal_code']).'" pattern="^\d{5}$" title="Bitte fünstellige PLZ eingeben" inputmode="numeric"></div>';
-            $html .= '<div class="col-md-5"><label class="form-label">Straße *</label><input class="form-control" name="address[street]" value="'.htmlspecialchars((string)$addr['street']).'"></div>';
-            $html .= '<div class="col-md-3"><label class="form-label">Haus‑Nr. *</label><input class="form-control" name="address[house_no]" value="'.htmlspecialchars((string)$addr['house_no']).'"></div>';
-            $html .= '<div class="col-md-4"><label class="form-label">WE‑Bezeichnung *</label><input class="form-control" name="address[unit_label]" value="'.htmlspecialchars((string)$addr['unit_label']).'"></div>';
-            $html .= '<div class="col-md-3"><label class="form-label">Etage (optional)</label><input class="form-control" name="address[floor]" value="'.htmlspecialchars((string)$addr['floor']).'"></div>';
-            $html .= '</div><div class="form-text mt-2">Bei „Weiter“ werden Objekt & WE automatisch erzeugt/zugeordnet.</div></div></div>';
+            $html .= '<div class="col-md-5"><label class="form-label">Ort *</label><input class="form-control" name="address[city]" value="'.$this->h((string)$addr['city']).'"></div>';
+            $html .= '<div class="col-md-2"><label class="form-label">PLZ</label><input class="form-control" name="address[postal_code]" value="'.$this->h((string)$addr['postal_code']).'"></div>';
+            $html .= '<div class="col-md-5"><label class="form-label">Straße *</label><input class="form-control" name="address[street]" value="'.$this->h((string)$addr['street']).'"></div>';
+            $html .= '<div class="col-md-3"><label class="form-label">Haus‑Nr. *</label><input class="form-control" name="address[house_no]" value="'.$this->h((string)$addr['house_no']).'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">WE‑Bezeichnung *</label><input class="form-control" name="address[unit_label]" value="'.$this->h((string)$addr['unit_label']).'"></div>';
+            $html .= '<div class="col-md-3"><label class="form-label">Etage</label><input class="form-control" name="address[floor]" value="'.$this->h((string)$addr['floor']).'"></div>';
+            $html .= '</div></div></div>';
 
-            // Protokoll‑Kopf
-            $typ = (string)($d['type'] ?? 'einzug');
+            // Kopf
             $html .= '<div class="card mb-3"><div class="card-body"><h2 class="h6 mb-3">Protokoll‑Kopf</h2><div class="row g-3">';
             $html .= '<div class="col-md-4"><label class="form-label">Art *</label><select class="form-select" name="type">';
-            foreach ([['einzug','Einzugsprotokoll'],['auszug','Auszugsprotokoll'],['zwischen','Zwischenprotokoll']] as $opt) {
-                $sel = ($typ===$opt[0]) ? ' selected' : '';
+            foreach ([['einzug','Einzugsprotokoll'],['auszug','Auszugsprotokoll'],['zwischen','Zwischenabnahme']] as $opt){
+                $sel = ($typ===$opt[0])?' selected':'';
                 $html .= '<option value="'.$opt[0].'"'.$sel.'>'.$opt[1].'</option>';
             }
             $html .= '</select></div>';
-            $html .= '<div class="col-md-5"><label class="form-label">Mietername *</label><input class="form-control" name="tenant_name" value="'.htmlspecialchars((string)($d['tenant_name'] ?? '')).'"></div>';
-            $html .= '<div class="col-md-3"><label class="form-label">Zeitstempel</label><input class="form-control" name="timestamp" type="datetime-local" value="'.htmlspecialchars((string)($data['timestamp'] ?? '')).'"></div>';
+            $html .= '<div class="col-md-5"><label class="form-label">Mietername *</label><input class="form-control" name="tenant_name" value="'.$this->h((string)($d['tenant_name'] ?? '')).'"></div>';
+            $html .= '<div class="col-md-3"><label class="form-label">Zeitstempel</label><input class="form-control" type="datetime-local" name="timestamp" value="'.$this->h((string)($data['timestamp'] ?? '')).'"></div>';
             $html .= '</div></div></div>';
 
             // Eigentümer
-            $ownerSnap = $data['owner'] ?? ['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>''];
-            $html .= '<div class="card mb-3"><div class="card-body"><h2 class="h6 mb-3">Eigentümer</h2><div class="row g-3 align-items-end">';
+            $ownerSnap = (array)($data['owner'] ?? ['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>'']);
+            $html .= '<div class="card mb-3"><div class="card-body"><h2 class="h6 mb-3">Eigentümer</h2><div class="row g-3">';
             $html .= '<div class="col-md-6"><label class="form-label">Eigentümer (bestehend)</label><select class="form-select" name="owner_id"><option value="">— bitte wählen —</option>';
-            foreach ($owners as $o) {
-                $label=$o['name'].($o['company'] ? ' ('.$o['company'].')' : '');
-                $sel = (($d['owner_id'] ?? '') === $o['id']) ? ' selected' : '';
-                $html .= '<option value="'.$o['id'].'"'.$sel.'>'.htmlspecialchars($label).'</option>';
-            }
+            foreach ($owners as $o){ $label=$o['name'].(!empty($o['company'])?' ('.$o['company'].')':''); $sel=(($d['owner_id'] ?? '')===$o['id'])?' selected':''; $html.='<option value="'.$this->h($o['id']).'"'.$sel.'>'.$this->h($label).'</option>'; }
             $html .= '</select></div>';
             $html .= '<div class="col-md-6"><div class="form-text">oder neuen Eigentümer erfassen:</div></div>';
-            $html .= '<div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="owner_new[name]" value="'.htmlspecialchars((string)$ownerSnap['name']).'"></div>';
-            $html .= '<div class="col-md-6"><label class="form-label">Firma</label><input class="form-control" name="owner_new[company]" value="'.htmlspecialchars((string)$ownerSnap['company']).'"></div>';
-            $html .= '<div class="col-md-12"><label class="form-label">Adresse</label><input class="form-control" name="owner_new[address]" value="'.htmlspecialchars((string)$ownerSnap['address']).'"></div>';
-            $html .= '<div class="col-md-6"><label class="form-label">E‑Mail</label><input type="email" class="form-control" name="owner_new[email]" value="'.htmlspecialchars((string)$ownerSnap['email']).'"></div>';
-            $html .= '<div class="col-md-6"><label class="form-label">Telefon</label><input class="form-control" name="owner_new[phone]" value="'.htmlspecialchars((string)$ownerSnap['phone']).'"></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="owner_new[name]" value="'.$this->h((string)$ownerSnap['name']).'"></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">Firma</label><input class="form-control" name="owner_new[company]" value="'.$this->h((string)$ownerSnap['company']).'"></div>';
+            $html .= '<div class="col-md-12"><label class="form-label">Adresse</label><input class="form-control" name="owner_new[address]" value="'.$this->h((string)$ownerSnap['address']).'"></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">E‑Mail</label><input class="form-control" type="email" name="owner_new[email]" value="'.$this->h((string)$ownerSnap['email']).'"></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">Telefon</label><input class="form-control" name="owner_new[phone]" value="'.$this->h((string)$ownerSnap['phone']).'"></div>';
             $html .= '</div></div></div>';
 
             // Hausverwaltung
             $html .= '<div class="card mb-3"><div class="card-body"><h2 class="h6 mb-3">Hausverwaltung</h2><div class="row g-3">';
             $html .= '<div class="col-md-6"><label class="form-label">Hausverwaltung</label><select class="form-select" name="manager_id"><option value="">— bitte wählen —</option>';
-            foreach ($managers as $m) {
-                $label=$m['name'].($m['company']?' ('.$m['company'].')':'');
-                $sel = (($d['manager_id'] ?? '') === $m['id']) ? ' selected' : '';
-                $html .= '<option value="'.$m['id'].'"'.$sel.'>'.htmlspecialchars($label).'</option>';
-            }
+            foreach ($managers as $m){ $label=$m['name'].(!empty($m['company'])?' ('.$m['company'].')':''); $sel=(($d['manager_id'] ?? '')===$m['id'])?' selected':''; $html.='<option value="'.$this->h($m['id']).'"'.$sel.'>'.$this->h($label).'</option>'; }
             $html .= '</select></div>';
             $html .= '<div class="col-md-6"><div class="form-text">Stammdaten unter <a href="/settings">Einstellungen</a> pflegbar.</div></div>';
             $html .= '</div></div></div>';
+
+            $html .= '<div class="d-flex justify-content-between"><a class="btn btn-ghost" href="/protocols"><i class="bi bi-x-lg"></i> Abbrechen</a><button class="btn btn-primary btn-lg">Weiter</button></div>';
         }
 
-        if ($step === 2) {
-            $rooms = $data['rooms'] ?? [];
-            $html .= '<div class="d-flex justify-content-between"><h2 class="h6">Räume</h2><button class="btn btn-sm btn-outline-primary" name="add_room" value="1">Raum hinzufügen</button></div>';if (!$rooms) $html .= '<p class="text-muted">Noch keine Räume – „Raum hinzufügen“.</p>';
-            foreach ($rooms as $key=>$r) {
-                $rk = htmlspecialchars((string)$key);
-                $html .= '<div class="card my-3"><div class="card-body row g-3">';
-                $html .= '<div class="col-md-6"><label class="form-label">Raumname *</label><input class="form-control" name="rooms['.$rk.'][name]" list="room-presets" list="room-presets" value="'.htmlspecialchars((string)($r['name'] ?? '')).'"></div>';
-                $html .= '<div class="col-md-6"><label class="form-label">Geruch</label><input class="form-control" name="rooms['.$rk.'][smell]" value="'.htmlspecialchars((string)($r['smell'] ?? '')).'"><div class="form-text">Hinweis: Gerüche sachlich dokumentieren (Art, Intensität, Ursache).</div></div>';
-                $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" name="rooms['.$rk.'][state]" rows="3">'.htmlspecialchars((string)($r['state'] ?? '')).'</textarea><div class="form-text">Hinweis: Vollständig & objektiv beschreiben; positive wie negative Feststellungen präzise notieren.</div></div>';
-                $html .= '<div class="col-md-3 form-check ms-2"><input class="form-check-input" type="checkbox" name="rooms['.$rk.'][accepted]" '.(!empty($r['accepted'])?'checked':'').'> <label class="form-check-label">Abnahme erfolgt</label></div>';
-                $html .= '<div class="col-md-6"><label class="form-label">WMZ Nummer</label><input class="form-control" name="rooms['.$rk.'][wmz_no]" value="'.htmlspecialchars((string)($r['wmz_no'] ?? '')).'"></div>';
-                $html .= '<div class="col-md-6"><label class="form-label">WMZ Stand</label><input class="form-control" name="rooms['.$rk.'][wmz_val]" value="'.htmlspecialchars((string)($r['wmz_val'] ?? '')).'" inputmode="decimal" pattern="^[0-9]+([.,][0-9]{1,3})?$"></div>';
-                $html .= '<div class="col-12"><label class="form-label">Fotos (JPG/PNG, max.10MB)</label><input class="form-control" type="file" name="room_photos['.$rk.'][]" multiple accept="image/*"></div>';
-                $html .= '<div class="col-12 text-end"><button class="btn btn-sm btn-outline-danger" name="del_room" value="'.$rk.'">Entfernen</button></div>';
-                $html .= '</div></div>';
+        /* ------------------ Schritt 2: Räume (+ Fotos, add/remove) ------------------ */
+        if ($step===2) {
+            $rooms = (array)($data['rooms'] ?? []);
+            if (!$rooms) $rooms[] = ['name'=>'','state'=>'','smell'=>'','accepted'=>false,'wmz_no'=>'','wmz_val'=>''];
+            $html .= '<div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h6 mb-0">Räume</h2><button type="button" id="add-room" class="btn btn-sm btn-outline-primary">+ Raum</button></div>';
+
+            $i = 0;
+            foreach ($rooms as $r) { $i++;
+                $html .= '<div class="card mb-3 room-item"><div class="card-body"><div class="row g-3">';
+                $html .= '<div class="col-md-4"><label class="form-label">Raumname</label><input class="form-control" name="rooms['.$i.'][name]" value="'.$this->h((string)($r['name'] ?? '')).'" list="room-presets"></div>';
+                $html .= '<div class="col-md-4"><label class="form-label">Geruch</label><input class="form-control" name="rooms['.$i.'][smell]" value="'.$this->h((string)($r['smell'] ?? '')).'"></div>';
+                $html .= '<div class="col-md-4 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" name="rooms['.$i.'][accepted]" '.(!empty($r['accepted'])?'checked':'').'> <label class="form-check-label">Abnahme erfolgt</label></div></div>';
+                $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" rows="3" name="rooms['.$i.'][state]">'.$this->h((string)($r['state'] ?? '')).'</textarea></div>';
+                $html .= '<div class="col-md-6"><label class="form-label">WMZ Nummer</label><input class="form-control" name="rooms['.$i.'][wmz_no]" value="'.$this->h((string)($r['wmz_no'] ?? '')).'"></div>';
+                $html .= '<div class="col-md-6"><label class="form-label">WMZ Stand</label><input class="form-control" name="rooms['.$i.'][wmz_val]" value="'.$this->h((string)($r['wmz_val'] ?? '')).'" inputmode="decimal" pattern="^[0-9]+([.,][0-9]{1,3})?$"></div>';
+                $html .= '<div class="col-12"><label class="form-label">Fotos (JPG/PNG, max.10MB)</label><input class="form-control" type="file" name="room_photos['.$i.'][]" multiple accept="image/*"></div>';
+                $html .= '<div class="col-12 text-end"><button type="button" class="btn btn-sm btn-outline-danger remove-room">Entfernen</button></div>';
+                $html .= '</div></div></div>';
             }
+
+            // Template + JS
+            $html .= '<template id="room-template"><div class="card mb-3 room-item"><div class="card-body"><div class="row g-3">';
+            $html .= '<div class="col-md-4"><label class="form-label">Raumname</label><input class="form-control" name="rooms[__IDX__][name]" list="room-presets"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">Geruch</label><input class="form-control" name="rooms[__IDX__][smell]"></div>';
+            $html .= '<div class="col-md-4 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" name="rooms[__IDX__][accepted]"> <label class="form-check-label">Abnahme erfolgt</label></div></div>';
+            $html .= '<div class="col-12"><label class="form-label">IST‑Zustand</label><textarea class="form-control" rows="3" name="rooms[__IDX__][state]"></textarea></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">WMZ Nummer</label><input class="form-control" name="rooms[__IDX__][wmz_no]"></div>';
+            $html .= '<div class="col-md-6"><label class="form-label">WMZ Stand</label><input class="form-control" name="rooms[__IDX__][wmz_val]" inputmode="decimal" pattern="^[0-9]+([.,][0-9]{1,3})?$"></div>';
+            $html .= '<div class="col-12"><label class="form-label">Fotos (JPG/PNG, max.10MB)</label><input class="form-control" type="file" name="room_photos[__IDX__][]" multiple accept="image/*"></div>';
+            $html .= '<div class="col-12 text-end"><button type="button" class="btn btn-sm btn-outline-danger remove-room">Entfernen</button></div>';
+            $html .= '</div></div></div></template>';
+
+            $html .= '<script>
+(function(){
+  var addBtn=document.getElementById("add-room"), tpl=document.getElementById("room-template");
+  function nextIndex(){ var max=0; document.querySelectorAll(\'[name^="rooms["][name$="[name]"]\').forEach(function(i){ var m=i.name.match(/^rooms\\[(\\d+)\\]/); if(m) max=Math.max(max, parseInt(m[1],10)); }); return max+1; }
+  function wireRemove(root){ root.querySelectorAll(".remove-room").forEach(function(b){ if(b._wired)return; b._wired=true; b.addEventListener("click", function(){ var card=b.closest(".room-item"); if(card) card.remove(); }); }); }
+  wireRemove(document);
+  if(addBtn && tpl){ addBtn.addEventListener("click", function(){ var idx=nextIndex(); var div=document.createElement("div"); div.innerHTML=tpl.innerHTML.replace(/__IDX__/g,String(idx)); tpl.parentNode.insertBefore(div.firstChild, tpl); wireRemove(document); }); }
+})();
+</script>';
+
+            $html .= '<div class="d-flex justify-content-between mt-2"><a class="btn btn-ghost" href="/protocols/wizard?step=1&draft='.$this->h($draft).'"><i class="bi bi-arrow-left"></i> Zurück</a><button class="btn btn-primary btn-lg">Weiter</button></div>';
         }
 
-        if ($step === 3) {
-            $meters = $data['meters'] ?? [];
-            $labels = [
+        /* ------------------ Schritt 3: Zähler ------------------ */
+        if ($step===3) {
+            $labels=[
                 'strom_we'=>'Strom (Wohneinheit)','strom_allg'=>'Strom (Haus allgemein)',
                 'gas_we'=>'Gas (Wohneinheit)','gas_allg'=>'Gas (Haus allgemein)',
-                'wasser_kueche_kalt'=>'Kaltwasser Küche (blau)','wasser_kueche_warm'=>'Warmwasser Küche (rot)',
-                'wasser_bad_kalt'=>'Kaltwasser Bad (blau)','wasser_bad_warm'=>'Warmwasser Bad (rot)',
-                'wasser_wm'=>'Wasserzähler Waschmaschine (blau)',
+                'wasser_kueche_kalt'=>'Wasser Küche (kalt)','wasser_kueche_warm'=>'Wasser Küche (warm)',
+                'wasser_bad_kalt'=>'Wasser Bad (kalt)','wasser_bad_warm'=>'Wasser Bad (warm)',
+                'wasser_wm'=>'Wasser Waschmaschine (blau)'
             ];
+            $meters=(array)($data['meters'] ?? []);
             $html .= '<h2 class="h6 mb-3">Zählerstände</h2>';
-            foreach ($labels as $k=>$label) {
-                $row = $meters[$k] ?? ['no'=>'','val'=>''];
+            foreach ($labels as $k=>$lbl){
+                $m = $meters[$k] ?? ['no'=>'','val'=>''];
                 $html .= '<div class="row g-3 align-items-end mb-2">';
-                $html .= '<div class="col-md-4"><label class="form-label">'.$label.' – Nummer</label><input class="form-control" name="meters['.$k.'][no]" value="'.htmlspecialchars((string)$row['no']).'"></div>';
-                $html .= '<div class="col-md-4"><label class="form-label">'.$label.' – Stand</label><input class="form-control" name="meters['.$k.'][val]" value="'.htmlspecialchars((string)$row['val']).'" inputmode="decimal" pattern="^[0-9]+([.,][0-9]{1,3})?$"></div>';
+                $html .= '<div class="col-md-5"><label class="form-label">'.$this->h($lbl).' – Nummer</label><input class="form-control" name="meters['.$k.'][no]" value="'.$this->h((string)$m['no']).'"></div>';
+                $html .= '<div class="col-md-5"><label class="form-label">'.$this->h($lbl).' – Stand</label><input class="form-control" name="meters['.$k.'][val]" value="'.$this->h((string)$m['val']).'"></div>';
                 $html .= '</div>';
             }
+            $html .= '<div class="d-flex justify-content-between mt-2"><a class="btn btn-ghost" href="/protocols/wizard?step=2&draft='.$this->h($draft).'"><i class="bi bi-arrow-left"></i> Zurück</a><button class="btn btn-primary btn-lg">Weiter</button></div>';
         }
 
-        if ($step === 4) {
-            $keys = $data['keys'] ?? [];
-            $meta = $data['meta'] ?? [
-                'notes'=>'','owner_send'=>false,'manager_send'=>false,
-                'bank'=>['bank'=>'','iban'=>'','holder'=>''],
-                'tenant_contact'=>['email'=>'','phone'=>''],
-                'tenant_new_addr'=>['street'=>'','house_no'=>'','postal_code'=>'','city'=>''],
-                'consents'=>['privacy'=>false,'marketing'=>false,'disposal'=>false],
-                'third_attendee'=>''
-            ];
-            $html .= '<h2 class="h6 mb-3">Schlüssel</h2><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Bezeichnung</th><th>Anzahl</th><th>Nr.</th><th></th></tr></thead><tbody>';if (!$keys) { $html .= '<tr><td colspan="4" class="text-muted">Noch keine Schlüssel – „+ Schlüssel“ klicken.</td></tr>'; }
-            foreach ($keys as $i=>$k) {
-                $html .= '<tr><td><input class="form-control" name="keys['.$i.'][label]" value="'.htmlspecialchars((string)($k['label'] ?? '')).'"></td>';
-                $html .= '<td><input class="form-control" type="number" min="0" name="keys['.$i.'][qty]" value="'.htmlspecialchars((string)($k['qty'] ?? '0')).'"></td>';
-                $html .= '<td><input class="form-control" name="keys['.$i.'][no]" value="'.htmlspecialchars((string)($k['no'] ?? '')).'"></td>';
-                $html .= '<td><button class="btn btn-sm btn-outline-danger" name="del_key" value="'.$i.'">Entfernen</button></td></tr>';
+        /* ------------------ Schritt 4: Bank + Dritte Person + Einwilligungen + DocuSign ------------------ */
+        if ($step===4) {
+            $meta = (array)($data['meta'] ?? ['consents'=>[]]);
+            $cons = (array)($meta['consents'] ?? []);
+            $kh = $getLatest('kaution_hinweis');
+            $rtD= $getLatest('datenschutz');
+            $rtE= $getLatest('entsorgung');
+            $rtM= $getLatest('marketing');
+
+            $bank=(array)($meta['bank'] ?? ['bank'=>'','iban'=>'','holder'=>'']);
+            $tc  =(array)($meta['tenant_contact'] ?? ['email'=>'','phone'=>'']);
+            $na  =(array)($meta['tenant_new_addr'] ?? ['street'=>'','house_no'=>'','postal_code'=>'','city'=>'']);
+            $third=(string)($meta['third_attendee'] ?? '');
+
+            $html .= '<h2 class="h6 mb-2">Weitere Angaben</h2>';
+            $html .= '<div class="alert alert-info small">Die Angabe der Bankverbindung dient zur Rückzahlung einer Mietkaution. Siehe hierzu die Angaben im Mietvertrag und Hinweise im Protokoll.</div>';
+            if (!empty($kh['title']) || !empty($kh['content'])) {
+                $html .= '<div class="card mb-3"><div class="card-body small"><div class="fw-semibold mb-1">'.$this->h((string)$kh['title']).' (v'.(int)($kh['version']??0).')</div>'.$kh['content'].'</div></div>';
             }
-            $html .= '</tbody></table></div><button class="btn btn-sm btn-outline-primary" name="add_key" value="1">+ Schlüssel</button>';
 
-            // Weitere Angaben
-            $html .= '<hr><h2 class="h6 mb-3">Weitere Angaben</h2><div class="row g-3">';
-            $html .= '<div class="col-md-4"><label class="form-label">Bank</label><input class="form-control" name="meta[bank][bank]" value="'.htmlspecialchars((string)$meta['bank']['bank']).'"></div>';
-            $html .= '<div class="col-md-4"><label class="form-label">IBAN</label><input class="form-control" name="meta[bank][iban]" value="'.htmlspecialchars((string)$meta['bank']['iban']).'" pattern="[A-Za-z]{2}\d{2}[A-Za-z0-9]{6,28}" title="IBAN: Länderkennzeichen + Prüfziffer + Konto-ID"></div>';
-            $html .= '<div class="col-md-4"><label class="form-label">Kontoinhaber</label><input class="form-control" name="meta[bank][holder]" value="'.htmlspecialchars((string)$meta['bank']['holder']).'"></div>';
-            $html .= '<div class="col-md-4"><label class="form-label">Mieter E‑Mail</label><input type="email" class="form-control" name="meta[tenant_contact][email]" value="'.htmlspecialchars((string)$meta['tenant_contact']['email']).'"></div>';
-            $html .= '<div class="col-md-4"><label class="form-label">Mieter Telefon</label><input class="form-control" name="meta[tenant_contact][phone]" value="'.htmlspecialchars((string)$meta['tenant_contact']['phone']).'" pattern="^[0-9+()\/\s-]{6,}$" title="Zulässig: Ziffern, +, /, -, (), Leerzeichen"></div>';
-
+            $html .= '<div class="row g-3">';
+            $html .= '<div class="col-md-4"><label class="form-label">Bank</label><input class="form-control" name="meta[bank][bank]" value="'.$this->h((string)$bank['bank']).'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">IBAN</label><input class="form-control" name="meta[bank][iban]" value="'.$this->h((string)$bank['iban']).'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">Kontoinhaber</label><input class="form-control" name="meta[bank][holder]" value="'.$this->h((string)$bank['holder']).'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">Mieter E‑Mail</label><input class="form-control" type="email" name="meta[tenant_contact][email]" value="'.$this->h((string)$tc['email']).'"></div>';
+            $html .= '<div class="col-md-4"><label class="form-label">Mieter Telefon</label><input class="form-control" name="meta[tenant_contact][phone]" value="'.$this->h((string)$tc['phone']).'"></div>';
             $html .= '<div class="col-12"><label class="form-label">Neue Meldeadresse</label></div>';
-            $html .= '<div class="col-md-6"><label class="form-label">Straße</label><input class="form-control" name="meta[tenant_new_addr][street]" value="'.htmlspecialchars((string)$meta['tenant_new_addr']['street']).'"></div>';
-            $html .= '<div class="col-md-2"><label class="form-label">Haus‑Nr.</label><input class="form-control" name="meta[tenant_new_addr][house_no]" value="'.htmlspecialchars((string)$meta['tenant_new_addr']['house_no']).'"></div>';
-            $html .= '<div class="col-md-2"><label class="form-label">PLZ</label><input class="form-control" name="meta[tenant_new_addr][postal_code]" value="'.htmlspecialchars((string)$meta['tenant_new_addr']['postal_code']).'" pattern="^\d{5}$" title="Bitte fünstellige PLZ eingeben"></div>';
-            $html .= '<div class="col-md-2"><label class="form-label">Ort</label><input class="form-control" name="meta[tenant_new_addr][city]" value="'.htmlspecialchars((string)$meta['tenant_new_addr']['city']).'"></div>';
+            $html .= '<div class="col-md-6"><input class="form-control" placeholder="Straße" name="meta[tenant_new_addr][street]" value="'.$this->h((string)$na['street']).'"></div>';
+            $html .= '<div class="col-md-2"><input class="form-control" placeholder="Haus‑Nr." name="meta[tenant_new_addr][house_no]" value="'.$this->h((string)$na['house_no']).'"></div>';
+            $html .= '<div class="col-md-2"><input class="form-control" placeholder="PLZ" name="meta[tenant_new_addr][postal_code]" value="'.$this->h((string)$na['postal_code']).'"></div>';
+            $html .= '<div class="col-md-2"><input class="form-control" placeholder="Ort" name="meta[tenant_new_addr][city]" value="'.$this->h((string)$na['city']).'"></div>';
 
-            // Datenschutzerklärung
-            $html .= '<div class="col-12"><label class="form-label">Datenschutzerklärung (v'.(int)($legalPrivacy['version'] ?? 0).')</label>';
-            $html .= '<div class="border p-2 small">'.($legalPrivacy['content'] ?? '').'</div>';
-            $html .= '<div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="meta[consents][privacy]" '.(!empty($meta['consents']['privacy'])?'checked':'').'> <label class="form-check-label">Ich habe die Datenschutzerklärung gelesen und akzeptiere sie.</label></div></div>';
+            // Dritte Person & DocuSign
+            $html .= '<div class="col-12"><label class="form-label">Dritte anwesende Person (optional)</label><input class="form-control" name="meta[third_attendee]" value="'.$this->h($third).'" placeholder="Name / Rolle"></div>';
+            $html .= '</div>';
 
-            $html .= '<div class="col-12"><label class="form-label">Einwilligungen (weitere)</label></div>';
-            $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[consents][marketing]" '.(!empty($meta['consents']['marketing'])?'checked':'').'> <label class="form-check-label">E‑Mail‑Marketing (außerhalb Mietverhältnis)</label></div></div>';
-            $html .= '<div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="meta[consents][disposal]" '.(!empty($meta['consents']['disposal'])?'checked':'').'> <label class="form-check-label">Einverständnis Entsorgung zurückgelassener Gegenstände</label></div></div>';
-            $html .= '</div>'; // row
-        // --- Soft Hints (non-blocking) ---
-        $soft = [];
-        // Zähler: wenn alle Stände leer sind -> Hinweis
-        $allEmpty = true;
-        foreach (($data['meters'] ?? []) as $m) {
-            if (trim((string)($m['val'] ?? '')) !== '') { $allEmpty = false; break; }
+            // Einwilligungen (voll)
+            $html .= '<h2 class="h6 mt-3">Einwilligungen</h2>';
+            // Datenschutz
+            $html .= '<div class="mb-2"><div class="small fw-semibold mb-1">Datenschutzerklärung (v'.(int)($rtD['version']??0).')</div><div class="border p-2 small">'.$rtD['content'].'</div><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="meta[consents][privacy]" '.(!empty($cons['privacy'])?'checked':'').'> <label class="form-check-label">Ich habe die Datenschutzerklärung gelesen und akzeptiere sie.</label></div></div>';
+            // Entsorgung
+            $html .= '<div class="mb-2"><div class="small fw-semibold mb-1">Einverständnis Entsorgung (v'.(int)($rtE['version']??0).')</div><div class="border p-2 small">'.$rtE['content'].'</div><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="meta[consents][disposal]" '.(!empty($cons['disposal'])?'checked':'').'> <label class="form-check-label">Ich stimme zu.</label></div></div>';
+            // Marketing
+            $html .= '<div class="mb-2"><div class="small fw-semibold mb-1">E‑Mail‑Marketing (v'.(int)($rtM['version']??0).')</div><div class="border p-2 small">'.$rtM['content'].'</div><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="meta[consents][marketing]" '.(!empty($cons['marketing'])?'checked':'').'> <label class="form-check-label">Ich willige ein.</label></div></div>';
+
+            // DocuSign‑Platzhalter
+            $html .= '<h2 class="h6 mt-3">Unterschriften (DocuSign)</h2><div class="row g-3 small">';
+            $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Mieter</div><div class="text-muted">Platzhalter für DocuSign‑Signatur</div></div></div>';
+            $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Eigentümer</div><div class="text-muted">Platzhalter für DocuSign‑Signatur</div></div></div>';
+            $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Dritte Person</div><div class="text-muted">Platzhalter (optional)</div></div></div>';
+            $html .= '</div>';
+
+            $html .= '<div class="d-flex justify-content-between mt-3"><a class="btn btn-ghost" href="/protocols/wizard?step=3&draft='.$this->h($draft).'"><i class="bi bi-arrow-left"></i> Zurück</a><button class="btn btn-primary btn-lg">Weiter</button></div>';
         }
-        if ($allEmpty) { $soft[] = 'Es wurden keine Zählerstände gepflegt.'; }
-
-        // Schlüssel: wenn leer -> Hinweis
-        if (empty($data['keys'])) { $soft[] = 'Es wurden noch keine Schlüssel erfasst.'; }
-
-        // Auszug: Bankdaten unvollständig -> Hinweis
-        if (($d['type'] ?? '') === 'auszug') {
-          $b = $data['meta']['bank'] ?? [];
-          if (empty($b['bank']) || empty($b['iban']) || empty($b['holder'])) {
-            $soft[] = 'Bankdaten sind unvollständig (Auszug).';
-          }
-        }
-
-        // Ausgabe der Soft-Hinweise (nicht blockierend)
-        if (!empty($soft)) {
-          $html .= '<div class="alert alert-secondary mt-3"><div class="fw-semibold mb-1">Hinweis:</div><ul class="mb-0 small">';
-          foreach ($soft as $s) { $html .= '<li>'.htmlspecialchars($s).'</li>'; }
-          $html .= '</ul></div>';
-        }
-        }
-
-        // Sticky-Footer mit "Zwischenspeichern" in 2/3/4
-        $html .= '<div class="kt-sticky-actions"><div>';
-        if ($step>1) $html .= '<a class="btn btn-ghost" href="/protocols/wizard?step='.($step-1).'&draft='.$draft.'"><i class="bi bi-arrow-left"></i> Zurück</a> ';
-        $html .= '<a class="btn btn-ghost" href="/protocols"><i class="bi bi-x-lg"></i> Abbrechen</a>';
-        $html .= '</div><div class="d-flex gap-2">';
-        if ($step === 2 || $step === 3 || $step === 4) {
-            $html .= '<button name="stay" value="1" class="btn btn-outline-secondary">Zwischenspeichern</button>';
-        }
-        $html .= '<button class="btn btn-primary btn-lg">Weiter <i class="bi bi-arrow-right"></i></button>';
-        $html .= '</div></div>';
 
         $html .= '</form>';
-
         View::render('Protokoll Wizard', $html);
     }
 
-    /** POST: Schritt speichern */
+    /** Speichert Schritt 1–4 in protocol_drafts.data und leitet weiter. */
     public function save(): void
     {
         Auth::requireAuth();
@@ -237,333 +234,159 @@ final class ProtocolWizardController
         $step  = max(1, min(4, (int)($_GET['step'] ?? 1)));
         $draft = (string)($_GET['draft'] ?? '');
 
-        $d = $this->loadDraft($pdo, $draft);
-        if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
-        $data = json_decode($d['data'] ?? '{}', true) ?: [];
+        $st=$pdo->prepare("SELECT * FROM protocol_drafts WHERE id=? AND status='draft'");
+        $st->execute([$draft]); $d=$st->fetch(PDO::FETCH_ASSOC);
+        if(!$d){ Flash::add('error','Entwurf nicht gefunden.'); header('Location:/protocols'); return; }
 
-        if ($step === 1) {
-            $addr = (array)($_POST['address'] ?? []);
-            $vals = [
-                'city'=>trim((string)($addr['city'] ?? '')),
-                'street'=>trim((string)($addr['street'] ?? '')),
-                'house_no'=>trim((string)($addr['house_no'] ?? '')),
-                'unit_label'=>trim((string)($addr['unit_label'] ?? '')),
-                'floor'=>trim((string)($addr['floor'] ?? '')),
-                'type'=>(string)($_POST['type'] ?? 'einzug'),
-                'tenant'=>trim((string)($_POST['tenant_name'] ?? '')),
-            ];
-            // Nur Adresse (Step1)
-            $postForRules = $_POST; $postForRules['address'] = $addr;
-            $errors = Validation::protocolPostErrors($vals['type'], $postForRules, 'step1');
-            if (!empty($errors)) { Flash::add('error', implode(' | ', $errors)); header('Location: /protocols/wizard?step=1&draft='.$draft); return; }
+        $data=json_decode((string)($d['data']??'{}'), true) ?: [];
 
-            // Objekt/WE anlegen/finden
-            [$objectId, $unitId] = $this->upsertObjectAndUnit($pdo, $vals['city'], (string)($addr['postal_code'] ?? ''), $vals['street'], $vals['house_no'], $vals['unit_label'], $vals['floor']);
+        if ($step===1) {
+            $addr=(array)($_POST['address'] ?? []);
+            $city=trim((string)($addr['city']??'')); $street=trim((string)($addr['street']??'')); $house=trim((string)($addr['house_no']??'')); $postal=trim((string)($addr['postal_code']??'')); $unit=trim((string)($addr['unit_label']??'')); $floor=trim((string)($addr['floor']??''));
+            $type=(string)($_POST['type'] ?? ($d['type'] ?? 'einzug')); $tenant=(string)($_POST['tenant_name'] ?? ($d['tenant_name'] ?? '')); $ts=(string)($_POST['timestamp'] ?? ($data['timestamp'] ?? ''));
 
-            // Eigentümer wählen/neu
-            $ownerIdPost = (string)($_POST['owner_id'] ?? '');
-            $ownerNew    = (array)($_POST['owner_new'] ?? []);
-            [$ownerId, $ownerSnap] = $this->resolveOwner($pdo, $ownerIdPost, $ownerNew);
+            if ($city==='' || $street==='' || $house==='') { Flash::add('error','Bitte Ort, Straße und Haus‑Nr. angeben.'); header('Location:/protocols/wizard?step=1&draft='.$draft); return; }
 
-            // Hausverwaltung
+            // objects/units
+            $so=$pdo->prepare("SELECT id FROM objects WHERE city=? AND street=? AND house_no=? LIMIT 1");
+            $so->execute([$city,$street,$house]); $objectId=(string)($so->fetchColumn() ?: '');
+            if ($objectId==='') {
+                $objectId=(string)$pdo->query('SELECT UUID()')->fetchColumn();
+                $pdo->prepare("INSERT INTO objects (id,city,postal_code,street,house_no,created_at) VALUES (?,?,?,?,?,NOW())")->execute([$objectId,$city,($postal!==''?$postal:null),$street,$house]);
+            } elseif ($postal!=='') {
+                $pdo->prepare("UPDATE objects SET postal_code=? WHERE id=? AND (postal_code IS NULL OR postal_code='')")->execute([$postal,$objectId]);
+            }
+            $su=$pdo->prepare("SELECT id FROM units WHERE object_id=? AND label=? LIMIT 1");
+            $su->execute([$objectId,$unit]); $unitId=(string)($su->fetchColumn() ?: '');
+            if ($unitId==='') {
+                $unitId=(string)$pdo->query('SELECT UUID()')->fetchColumn();
+                $pdo->prepare("INSERT INTO units (id,object_id,label,floor,created_at) VALUES (?,?,?, ?, NOW())")->execute([$unitId,$objectId,$unit,($floor!==''?$floor:null)]);
+            } elseif ($floor!=='') {
+                $pdo->prepare("UPDATE units SET floor=? WHERE id=? AND (floor IS NULL OR floor='')")->execute([$floor,$unitId]);
+            }
+
+            // owner
+            $ownerId=null; $ownerSnap=['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>''];
+            $ownerIdPost=(string)($_POST['owner_id'] ?? '');
+            if ($ownerIdPost!=='') {
+                $q=$pdo->prepare('SELECT name,company,address,email,phone FROM owners WHERE id=?'); $q->execute([$ownerIdPost]); $ownerId=$ownerIdPost; $ownerSnap=$q->fetch(PDO::FETCH_ASSOC) ?: $ownerSnap;
+            } else {
+                $on=(array)($_POST['owner_new'] ?? []);
+                if (trim((string)($on['name'] ?? ''))!=='') {
+                    $ownerId=(string)$pdo->query('SELECT UUID()')->fetchColumn();
+                    $pdo->prepare('INSERT INTO owners (id,name,company,address,email,phone,created_at) VALUES (?,?,?,?,?,?,NOW())')->execute([$ownerId,(string)$on['name'],(string)($on['company']??null),(string)($on['address']??null),(string)($on['email']??null),(string)($on['phone']??null)]);
+                    $ownerSnap=['name'=>(string)$on['name'],'company'=>(string)($on['company']??''),'address'=>(string)($on['address']??''),'email'=>(string)($on['email']??''),'phone'=>(string)($on['phone']??'')];
+                }
+            }
             $managerId = (string)($_POST['manager_id'] ?? '');
 
-            $data['timestamp'] = (string)($_POST['timestamp'] ?? ($data['timestamp'] ?? ''));
+            $data['address']=['city'=>$city,'postal_code'=>$postal,'street'=>$street,'house_no'=>$house,'unit_label'=>$unit,'floor'=>$floor];
+            $data['timestamp']=$ts;
+            $data['owner']=$ownerSnap;
 
-            $this->updateDraft($pdo, $draft, [
-                'unit_id'     => $unitId,
-                'type'        => $vals['type'],
-                'tenant_name' => $vals['tenant'],
-                'owner_id'    => $ownerId ?: null,
-                'manager_id'  => $managerId ?: null,
-                'data'        => array_merge($data, [
-                    'address'=>[
-                        'city'=>$vals['city'],
-                        'postal_code'=>trim((string)($addr['postal_code'] ?? '')),
-                        'street'=>$vals['street'],
-                        'house_no'=>$vals['house_no'],
-                        'unit_label'=>$vals['unit_label'],
-                        'floor'=>$vals['floor'],
-                    ],
-                    'owner'=>$ownerSnap
-                ]),
-                'step'        => max(2, (int)$d['step']),
-            ]);
+            $pdo->prepare("UPDATE protocol_drafts SET unit_id=?, type=?, tenant_name=?, owner_id=?, manager_id=?, data=?, updated_at=NOW() WHERE id=?")
+                ->execute([$unitId,$type,$tenant,($ownerId?:null),($managerId?:null), json_encode($data, JSON_UNESCAPED_UNICODE), $draft]);
+
+            header('Location:/protocols/wizard?step=2&draft='.$draft); return;
         }
 
-        if ($step === 2) {
-            // add/remove -> sofort zurück (keine Full-Validierung)
-            if (isset($_POST['add_room'])) {
-                $key = 'r'.substr(sha1((string)microtime(true)),0,6);
-                $data['rooms'][$key] = ['name'=>'','state'=>'','smell'=>'','accepted'=>false,'wmz_no'=>'','wmz_val'=>''];
-                $this->updateDraft($pdo, $draft, ['data'=>$data]);
-                header('Location: /protocols/wizard?step=2&draft='.$draft); return;
-            }
-            if (isset($_POST['del_room'])) {
-                $k = (string)$_POST['del_room']; unset($data['rooms'][$k]);
-                $this->updateDraft($pdo, $draft, ['data'=>$data]);
-                header('Location: /protocols/wizard?step=2&draft='.$draft); return;
-            }
-            // Inhalte übernehmen
-            if (isset($_POST['rooms']) && is_array($_POST['rooms'])) {
-                foreach ($_POST['rooms'] as $k=>$r) {
-                    $data['rooms'][$k]['name']  = trim((string)($r['name'] ?? ''));
-                    $data['rooms'][$k]['state'] = trim((string)($r['state'] ?? ''));
-                    $data['rooms'][$k]['smell'] = trim((string)($r['smell'] ?? ''));
-                    $data['rooms'][$k]['accepted'] = isset($r['accepted']);
-                    $data['rooms'][$k]['wmz_no'] = trim((string)($r['wmz_no'] ?? ''));
-                    $data['rooms'][$k]['wmz_val']= trim((string)($r['wmz_val'] ?? ''));
-                }
-            }
-            $this->updateDraft($pdo, $draft, ['data'=>$data, 'step'=>max(3,(int)$d['step'])]);
-            // Zwischenspeichern -> in Step 2 bleiben
-            if (isset($_POST['stay'])) { header('Location: /protocols/wizard?step=2&draft='.$draft); return; }
+        if ($step===2) {
+            $data['rooms'] = is_array($_POST['rooms'] ?? null) ? (array)$_POST['rooms'] : [];
+            $pdo->prepare("UPDATE protocol_drafts SET data=?, updated_at=NOW() WHERE id=?")->execute([json_encode($data, JSON_UNESCAPED_UNICODE), $draft]);
+            header('Location:/protocols/wizard?step=3&draft='.$draft); return;
         }
 
-        if ($step === 3) {
-            // Inhalte übernehmen
-            $data['meters'] = (array)($_POST['meters'] ?? []);
-            $this->updateDraft($pdo, $draft, ['data'=>$data, 'step'=>max(4,(int)$d['step'])]);
-            // Zwischenspeichern -> in Step 3 bleiben
-            if (isset($_POST['stay'])) { header('Location: /protocols/wizard?step=3&draft='.$draft); return; }
+        if ($step===3) {
+            $data['meters'] = is_array($_POST['meters'] ?? null) ? (array)$_POST['meters'] : [];
+            $pdo->prepare("UPDATE protocol_drafts SET data=?, updated_at=NOW() WHERE id=?")->execute([json_encode($data, JSON_UNESCAPED_UNICODE), $draft]);
+            header('Location:/protocols/wizard?step=4&draft='.$draft); return;
         }
 
-        if ($step === 4) {
-            // add/remove -> sofort zurück
-            if (isset($_POST['add_key'])) {
-                $data['keys'][] = ['label'=>'','qty'=>0,'no'=>''];
-                $this->updateDraft($pdo, $draft, ['data'=>$data]);
-                header('Location: /protocols/wizard?step=4&draft='.$draft); return;
+        if ($step===4) {
+            $keys=[]; if (!empty($_POST['keys']) && is_array($_POST['keys'])) {
+                foreach ($_POST['keys'] as $k) { $keys[]=['label'=>trim((string)($k['label'] ?? '')),'qty'=>(int)($k['qty'] ?? 0),'no'=>trim((string)($k['no'] ?? ''))]; }
             }
-            if (isset($_POST['del_key'])) {
-                $i = (string)$_POST['del_key'];
-                if (isset($data['keys'][(int)$i])) unset($data['keys'][(int)$i]);
-                $data['keys'] = array_values($data['keys'] ?? []);
-                $this->updateDraft($pdo, $draft, ['data'=>$data]);
-                header('Location: /protocols/wizard?step=4&draft='.$draft); return;
-            }
-            // Inhalte übernehmen
-            if (isset($_POST['keys']) && is_array($_POST['keys'])) {
-                $tmp=[]; foreach ($_POST['keys'] as $k) {
-                    $tmp[] = ['label'=>trim((string)($k['label']??'')),'qty'=>(int)($k['qty']??0),'no'=>trim((string)($k['no']??''))];
-                }
-                $data['keys']=$tmp;
-            }
-            $meta = (array)($_POST['meta'] ?? []);
-            $data['meta'] = [
-                'notes'=>trim((string)($meta['notes'] ?? '')),
-                'owner_send'=>!empty($meta['owner_send']),
-                'manager_send'=>!empty($meta['manager_send']),
-                'bank'=>[
-                    'bank'=>trim((string)($meta['bank']['bank'] ?? '')),
-                    'iban'=>trim((string)($meta['bank']['iban'] ?? '')),
-                    'holder'=>trim((string)($meta['bank']['holder'] ?? '')),
-                ],
-                'tenant_contact'=>[
-                    'email'=>trim((string)($meta['tenant_contact']['email'] ?? '')),
-                    'phone'=>trim((string)($meta['tenant_contact']['phone'] ?? '')),
-                ],
-                'tenant_new_addr'=>[
-                    'street'=>trim((string)($meta['tenant_new_addr']['street'] ?? '')),
-                    'house_no'=>trim((string)($meta['tenant_new_addr']['house_no'] ?? '')),
-                    'postal_code'=>trim((string)($meta['tenant_new_addr']['postal_code'] ?? '')),
-                    'city'=>trim((string)($meta['tenant_new_addr']['city'] ?? '')),
-                ],
+            $meta=(array)($_POST['meta'] ?? []);
+            $data['keys']=$keys;
+            $data['meta']=[
+                'notes'=>(string)($meta['notes'] ?? ''),
+                'bank'           => (array)($meta['bank'] ?? []),
+                'tenant_contact' => (array)($meta['tenant_contact'] ?? []),
+                'tenant_new_addr'=> (array)($meta['tenant_new_addr'] ?? []),
+                'third_attendee' => (string)($meta['third_attendee'] ?? ''),
                 'consents'=>[
-                    'privacy'=>!empty($meta['consents']['privacy']),
-                    'marketing'=>!empty($meta['consents']['marketing']),
-                    'disposal'=>!empty($meta['consents']['disposal']),
+                    'privacy'  => !empty($meta['consents']['privacy']),
+                    'marketing'=> !empty($meta['consents']['marketing']),
+                    'disposal' => !empty($meta['consents']['disposal']),
                 ],
-                'third_attendee'=>trim((string)($meta['third_attendee'] ?? '')),
+                'owner_send'   => !empty($meta['owner_send']),
+                'manager_send' => !empty($meta['manager_send']),
             ];
-
-            // Voll-Validierung (Adresse/Zähler aus Draft einspeisen!)
-            $typ = (string)($d['type'] ?? 'einzug');
-            $postForRules = $_POST;
-            $postForRules['type']    = $typ;
-            $postForRules['address'] = (array)($data['address'] ?? []);
-            $postForRules['meters']  = (array)($data['meters']  ?? []);
-            $errors = \App\Validation::protocolPostErrors($typ, $postForRules, 'full');
-            if (!empty($errors)) {
-                \App\Flash::add('error', implode(' | ', $errors));
-                $this->updateDraft($pdo, $draft, ['data'=>$data]);
-                header('Location: /protocols/wizard?step=4&draft='.$draft); return;
-            }
-
-            $this->updateDraft($pdo, $draft, ['data'=>$data]);
-            // Zwischenspeichern -> in Step 4 bleiben
-            if (isset($_POST['stay'])) { header('Location: /protocols/wizard?step=4&draft='.$draft); return; }
+            $pdo->prepare("UPDATE protocol_drafts SET data=?, updated_at=NOW() WHERE id=?")->execute([json_encode($data, JSON_UNESCAPED_UNICODE), $draft]);
+            header('Location:/protocols/wizard/review?draft='.$draft); return;
         }
 
-        // Navigation: normale Weiter-Logik
-        if ($step >= 4) { header('Location: /protocols/wizard/review?draft='.$draft); return; }
-        header('Location: /protocols/wizard?step='.($step+1).'&draft='.$draft);
+        Flash::add('error','Unbekannter Schritt.'); header('Location:/protocols');
     }
 
-    /** Review */
     public function review(): void
     {
         Auth::requireAuth();
-        $pdo = Database::pdo();
-        $draft = (string)($_GET['draft'] ?? '');
-        $d = $this->loadDraft($pdo, $draft);
-        if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
-        $data = json_decode($d['data'] ?? '{}', true) ?: [];
+        $pdo=Database::pdo();
+        $draft=(string)($_GET['draft'] ?? '');
+        $st=$pdo->prepare("SELECT * FROM protocol_drafts WHERE id=? AND status='draft'");
+        $st->execute([$draft]); $d=$st->fetch(PDO::FETCH_ASSOC);
+        if(!$d){ Flash::add('error','Entwurf nicht gefunden.'); header('Location:/protocols'); return; }
+        $data=json_decode((string)($d['data']??'{}'), true) ?: [];
 
-        $title = '—';
+        $unitTitle='—';
         if (!empty($d['unit_id'])) {
-            $st = $pdo->prepare('SELECT u.label,o.city,o.street,o.house_no FROM units u JOIN objects o ON o.id=u.object_id WHERE u.id=?');
-            $st->execute([$d['unit_id']]); if ($row=$st->fetch(PDO::FETCH_ASSOC)) $title = $row['city'].', '.$row['street'].' '.$row['house_no'].' – '.$row['label'];
-        }
-
-        $ownerStr = '—';
-        if (!empty($d['owner_id'])) {
-            $st=$pdo->prepare('SELECT name,company FROM owners WHERE id=?'); $st->execute([$d['owner_id']]);
-            if ($o=$st->fetch(PDO::FETCH_ASSOC)) $ownerStr = $o['name'].($o['company']?' ('.$o['company'].')':'');
-        } elseif (!empty($data['owner']['name'])) $ownerStr = $data['owner']['name'];
-
-        $managerStr = '—';
-        if (!empty($d['manager_id'])) {
-            $st=$pdo->prepare('SELECT name,company FROM managers WHERE id=?'); $st->execute([$d['manager_id']]);
-            if ($m=$st->fetch(PDO::FETCH_ASSOC)) $managerStr = $m['name'].($m['company']?' ('.$m['company'].')':'');
-        }
-
-        $html  = '<h1 class="h5 mb-3">Review & Abschluss</h1><dl class="row">';
-        $html .= '<dt class="col-sm-3">Wohneinheit</dt><dd class="col-sm-9">'.htmlspecialchars($title).'</dd>';
-        $html .= '<dt class="col-sm-3">Eigentümer</dt><dd class="col-sm-9">'.htmlspecialchars($ownerStr).'</dd>';
-        $html .= '<dt class="col-sm-3">Hausverwaltung</dt><dd class="col-sm-9">'.htmlspecialchars($managerStr).'</dd>';
-        $html .= '<dt class="col-sm-3">Art</dt><dd class="col-sm-9">'.htmlspecialchars(($d['type']==='einzug'?'Einzugsprotokoll':($d['type']==='auszug'?'Auszugsprotokoll':'Zwischenprotokoll'))).'</dd>';
-        $html .= '<dt class="col-sm-3">Mieter</dt><dd class="col-sm-9">'.htmlspecialchars((string)($d['tenant_name'] ?? '')).'</dd></dl>';
-
-        if (!empty($data['rooms'])) {
-            $html .= '<h2 class="h6 mt-4">Räume</h2><ul class="list-group mb-3">';
-            foreach ($data['rooms'] as $r) {
-                $html .= '<li class="list-group-item"><strong>'.htmlspecialchars((string)($r['name'] ?? '')).'</strong> — '.htmlspecialchars((string)($r['state'] ?? '')).'</li>';
+            $q=$pdo->prepare("SELECT u.label,o.city,o.street,o.house_no FROM units u JOIN objects o ON o.id=u.object_id WHERE u.id=?");
+            $q->execute([$d['unit_id']]); if($r=$q->fetch(PDO::FETCH_ASSOC)){
+                $unitTitle=$r['city'].', '.$r['street'].' '.$r['house_no'].' – '.$r['label'];
             }
-            $html .= '</ul>';
         }
 
-        $html .= '<form method="post" action="/protocols/wizard/finish?draft='.$draft.'"><div class="kt-sticky-actions"><div>';
-        $html .= '<a class="btn btn-ghost" href="/protocols/wizard?step=4&draft='.$draft.'"><i class="bi bi-arrow-left"></i> Zurück</a>';
-        $html .= '</div><div class="d-flex gap-2"><button class="btn btn-success btn-lg">Abschließen & Speichern</button></div></div></form>';
-
-        View::render('Protokoll Review', $html);
+        ob_start(); ?>
+        <h1 class="h5 mb-3">Review</h1>
+        <dl class="row">
+          <dt class="col-sm-3">Wohneinheit</dt><dd class="col-sm-9"><?= htmlspecialchars($unitTitle) ?></dd>
+          <dt class="col-sm-3">Art</dt><dd class="col-sm-9"><?= htmlspecialchars(($d['type']==='einzug'?'Einzugsprotokoll':($d['type']==='auszug'?'Auszugsprotokoll':'Zwischenabnahme'))) ?></dd>
+          <dt class="col-sm-3">Mieter</dt><dd class="col-sm-9"><?= htmlspecialchars((string)($d['tenant_name'] ?? '')) ?></dd>
+          <dt class="col-sm-3">Zeitstempel</dt><dd class="col-sm-9"><?= htmlspecialchars((string)($data['timestamp'] ?? '')) ?></dd>
+        </dl>
+        <form method="post" action="/protocols/wizard/finish?draft=<?= htmlspecialchars($draft) ?>">
+          <button class="btn btn-success btn-lg">Abschließen & Speichern</button>
+          <a class="btn btn-ghost" href="/protocols/wizard?step=4&draft=<?= htmlspecialchars($draft) ?>">Zurück</a>
+        </form>
+        <?php
+        View::render('Review', ob_get_clean());
     }
 
-    /** Abschluss: Protokoll + v1 erzeugen, Dateien umhängen, Draft schließen, Redirect /edit */
     public function finish(): void
     {
         Auth::requireAuth();
-        $pdo = Database::pdo();
-        $draft = (string)($_GET['draft'] ?? '');
-        $d = $this->loadDraft($pdo, $draft);
-        if (!$d) { Flash::add('error','Entwurf nicht gefunden.'); header('Location: /protocols'); return; }
-        $data = json_decode($d['data'] ?? '{}', true) ?: [];
+        $pdo=Database::pdo();
+        $draft=(string)($_GET['draft'] ?? '');
+        $st=$pdo->prepare("SELECT * FROM protocol_drafts WHERE id=? AND status='draft'");
+        $st->execute([$draft]); $d=$st->fetch(PDO::FETCH_ASSOC);
+        if(!$d){ Flash::add('error','Entwurf nicht gefunden.'); header('Location:/protocols'); return; }
+        $data=json_decode((string)($d['data']??'{}'), true) ?: [];
 
-        // Minimalcheck
-        // Minimalcheck: Draft muss unit_id, type, tenant_name haben (aus Schritt 1)
-        if (empty($d['unit_id']) || empty($d['type']) || empty($d['tenant_name'])) {
-            Flash::add('error','Bitte Schritt 1 vervollständigen.');
-            header('Location: /protocols/wizard?step=1&draft='.$draft);
-            return;
-        }
-        // Protokoll speichern
-        $pid = $this->uuid($pdo);
-        $pdo->prepare('INSERT INTO protocols (id,unit_id,type,tenant_name,payload,owner_id,manager_id,created_at) VALUES (?,?,?,?,?,?,?,NOW())')
-            ->execute([$pid, $d['unit_id'],$d['type'],$d['tenant_name'], json_encode($data, JSON_UNESCAPED_UNICODE), ($d['owner_id'] ?? null), ($d['manager_id'] ?? null)]);
-        AuditLogger::log('protocols',$pid,'create',['from_draft'=>$draft]);
-
-        // v1
-        $pdo->prepare('INSERT INTO protocol_versions (id,protocol_id,version_no,data,created_by,created_at) VALUES (UUID(),?,?,?,?,NOW())')
-            ->execute([$pid,1,json_encode($data, JSON_UNESCAPED_UNICODE), (Auth::user()['email'] ?? 'system')]);
-
-        // Dateien umhängen & Draft schließen
-        $pdo->prepare('UPDATE protocol_files SET protocol_id=?, draft_id=NULL WHERE draft_id=?')->execute([$pid,$draft]);
-        $pdo->prepare('UPDATE protocol_drafts SET status="finished", updated_at=NOW() WHERE id=?')->execute([$draft]);
-
-        Flash::add('success','Protokoll gespeichert und Version 1 angelegt.');
-        header('Location: /protocols/edit?id='.$pid);
-        exit;
-    }
-
-    /* ===== Helper ===== */
-
-    private function loadDraft(PDO $pdo, string $id): ?array
-    {
-        if ($id==='') return null;
-        $st=$pdo->prepare('SELECT * FROM protocol_drafts WHERE id=? AND status="draft"');
-        $st->execute([$id]); $row=$st->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
-    }
-
-    private function updateDraft(PDO $pdo, string $id, array $patch): void
-    {
-        $st=$pdo->prepare('SELECT * FROM protocol_drafts WHERE id=?'); $st->execute([$id]);
-        if (!$st->fetch()) return;
-
-        $fields=[]; $params=[];
-        foreach (['unit_id','type','tenant_name','owner_id','manager_id'] as $f) {
-            if (array_key_exists($f,$patch)) { $fields[]="$f=?"; $params[]=$patch[$f]; }
-        }
-        if (array_key_exists('data',$patch)) { $fields[]='data=?'; $params[] = is_string($patch['data']) ? $patch['data'] : json_encode($patch['data'], JSON_UNESCAPED_UNICODE); }
-        if (array_key_exists('step',$patch)) { $fields[]='step=?'; $params[]=(int)$patch['step']; }
-
-        if ($fields) {
-            $fields[]='updated_at=NOW()'; $params[]=$id;
-            $pdo->prepare('UPDATE protocol_drafts SET '.implode(',', $fields).' WHERE id=?')->execute($params);
-        }
-    }
-
-    private function upsertObjectAndUnit(PDO $pdo, string $city, string $postal, string $street, string $houseNo, string $unitLabel, string $floor): array
-    {
-        $so=$pdo->prepare('SELECT id FROM objects WHERE city=? AND street=? AND house_no=? LIMIT 1');
-        $so->execute([$city,$street,$houseNo]); $objectId=$so->fetchColumn();
-        if (!$objectId) {
-            $objectId=$this->uuid($pdo);
-            $pdo->prepare('INSERT INTO objects (id,city,postal_code,street,house_no,created_at) VALUES (?,?,?,?,?,NOW())')
-                ->execute([$objectId,$city,($postal!==''?$postal:null),$street,$houseNo]);
-        } elseif ($postal!=='') {
-            $pdo->prepare('UPDATE objects SET postal_code=? WHERE id=? AND (postal_code IS NULL OR postal_code="")')->execute([$postal,$objectId]);
+        if (empty($d['unit_id']) || empty($d['type'])) {
+            Flash::add('error','Bitte Schritt 1 vervollständigen.'); header('Location:/protocols/wizard?step=1&draft='.$draft); return;
         }
 
-        $su=$pdo->prepare('SELECT id FROM units WHERE object_id=? AND label=? LIMIT 1');
-        $su->execute([$objectId,$unitLabel]); $unitId=$su->fetchColumn();
-        if (!$unitId) {
-            $unitId=$this->uuid($pdo);
-            $pdo->prepare('INSERT INTO units (id,object_id,label,floor,created_at) VALUES (?,?,?, ?, NOW())')
-                ->execute([$unitId,$objectId,$unitLabel,($floor!==''?$floor:null)]);
-        } elseif ($floor!=='') {
-            $pdo->prepare('UPDATE units SET floor=? WHERE id=? AND (floor IS NULL OR floor="")')->execute([$floor,$unitId]);
-        }
-        return [(string)$objectId,(string)$unitId];
-    }
+        $pid=(string)$pdo->query('SELECT UUID()')->fetchColumn();
+        $pdo->prepare("INSERT INTO protocols (id,unit_id,type,tenant_name,payload,owner_id,manager_id,created_at) VALUES (?,?,?,?,?,?,?,NOW())")
+            ->execute([$pid,(string)$d['unit_id'],(string)$d['type'],(string)($d['tenant_name'] ?? ''), json_encode($data, JSON_UNESCAPED_UNICODE), ($d['owner_id'] ?? null), ($d['manager_id'] ?? null)]);
+        $pdo->prepare("INSERT INTO protocol_versions (id,protocol_id,version_no,data,created_by,created_at) VALUES (UUID(),?,?,?,?,NOW())")
+            ->execute([$pid,1,json_encode($data, JSON_UNESCAPED_UNICODE),(string)(\App\Auth::user()['email'] ?? 'system')]);
 
-    private function resolveOwner(PDO $pdo, string $ownerIdPost, array $ownerNew): array
-    {
-        if ($ownerIdPost!=='') {
-            $st=$pdo->prepare('SELECT name,company,address,email,phone FROM owners WHERE id=?'); $st->execute([$ownerIdPost]);
-            $o=$st->fetch(PDO::FETCH_ASSOC);
-            return [$ownerIdPost, ($o ?: ['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>''])];
-        }
-        $name = trim((string)($ownerNew['name'] ?? ''));
-        if ($name!=='') {
-            $id=$this->uuid($pdo);
-            $pdo->prepare('INSERT INTO owners (id,name,company,address,email,phone,created_at) VALUES (?,?,?,?,?,?,NOW())')
-                ->execute([$id, $name, ($ownerNew['company'] ?? null), ($ownerNew['address'] ?? null), ($ownerNew['email'] ?? null), ($ownerNew['phone'] ?? null)]);
-            $snap = [
-                'name'=>$name,
-                'company'=>trim((string)($ownerNew['company'] ?? '')),
-                'address'=>trim((string)($ownerNew['address'] ?? '')),
-                'email'=>trim((string)($ownerNew['email'] ?? '')),
-                'phone'=>trim((string)($ownerNew['phone'] ?? '')),
-            ];
-            return [$id, $snap];
-        }
-        return [null, ['name'=>'','company'=>'','address'=>'','email'=>'','phone'=>'']];
-    }
+        try { $pdo->prepare("UPDATE protocol_files SET protocol_id=?, draft_id=NULL WHERE draft_id=?")->execute([$pid,$draft]); } catch (\Throwable $e) {}
+        $pdo->prepare("UPDATE protocol_drafts SET status='finished', updated_at=NOW() WHERE id=?")->execute([$draft]);
 
-    private function uuid(PDO $pdo): string
-    {
-        return (string)$pdo->query('SELECT UUID()')->fetchColumn();
+        Flash::add('success','Protokoll gespeichert (v1).');
+        header('Location:/protocols/edit?id='.$pid);
     }
 }
