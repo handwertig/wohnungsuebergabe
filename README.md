@@ -34,12 +34,12 @@ Entwickelt für Projektentwickler, Hausverwaltungen und Eigentümer, ersetzt sie
 ---
 
 ## Preview
-![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/01%20login.png)
-![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/02%20uebersicht.png)
-![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/03%20wizard.png)
-![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/04%20statistik.png)
-![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/05%20einstellungen.png)
-![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/06%20texte.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/images/01%20login.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/images/02%20uebersicht.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/images/03%20wizard.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/images/04%20statistik.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/images/05%20einstellungen.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/images/06%20texte.png)
 
 ---
 
