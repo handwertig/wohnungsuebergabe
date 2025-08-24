@@ -33,6 +33,16 @@ Entwickelt für Projektentwickler, Hausverwaltungen und Eigentümer, ersetzt sie
 
 ---
 
+## Preview
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/01%20login.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/02%20uebersicht.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/03%20wizard.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/04%20statistik.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/05%20einstellungen.png)
+![Alt-Text](https://github.com/handwertig/wohnungsuebergabe/blob/main/docs/06%20texte.png)
+
+---
+
 ## Technologie-Stack
 - **PHP 8.3 (FPM)**  
 - **MySQL/MariaDB**  
