@@ -35,3 +35,8 @@
 - Fehlende Methoden `pdf()`/`send()` in `ProtocolsController` (PDF‑Ausgabe / Mail‑Versand funktionieren wieder; bei Aufruf aus Editor **Bootstrap‑Flash** statt Roh‑JSON).
 - Profil‑Speichern auf `/settings/users` (optional `updated_at`‑Spalte erzeugt bzw. Update ohne diese Spalte).
 - Stabilisierung von Routing & Views; entfernte fragile Inline‑Patches durch konsistente Controller‑Implementierungen.
+
+## [0.10.1] – 2025-08-24
+### Changed
+- **Migration 022**: `legal_texts.name` auf `VARCHAR(64)` (utf8mb4) angehoben; Index `(name, version)` hergestellt.
+  Ermöglicht neue Textbausteine wie `kaution_hinweis` ohne „Data truncated for column 'name'“.
