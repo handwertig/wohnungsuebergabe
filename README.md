@@ -43,6 +43,10 @@ Entwickelt für Projektentwickler, Hausverwaltungen und Eigentümer, ersetzt sie
 
 ## QuickStart
 
+## Releases & Downloads
+Offizielle Releases (Tags, ZIP-Downloads) findest du unter: GitHub → **Releases**.
+
+
 \`\`\`bash
 # Repo klonen
 git clone https://github.com/handwertig/wohnungsuebergabe.git
