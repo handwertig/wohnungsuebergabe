@@ -87,4 +87,16 @@ final class Auth
         $u = self::user();
         return $u && ($u['role'] ?? '') === 'admin';
     }
+
+    public static function isHausverwaltung(): bool
+    {
+        $u = self::user();
+        return $u && ($u['role'] ?? '') === 'hausverwaltung';
+    }
+
+    public static function isEigentuemer(): bool
+    {
+        $u = self::user();
+        return $u && ($u['role'] ?? '') === 'eigentuemer';
+    }
 }

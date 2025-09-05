@@ -79,9 +79,6 @@ final class View
     <!-- AdminKit Theme -->
     <link href="/assets/adminkit-theme.css" rel="stylesheet">
     
-    <!-- AdminKit Minimal Override (weniger runde Kanten) -->
-    <link href="/assets/adminkit-minimal.css" rel="stylesheet">
-    
     <!-- Custom CSS -->
     <?php if ($customCss): ?>
     <style><?= $customCss ?></style>

@@ -1,0 +1,608 @@
+/* === AdminKit-Inspired Theme ============================================= */
+/* Minimalist design with subtle shadows, reduced border-radius, clean typography */
+
+/* Fonts - AdminKit uses system fonts primarily */
+:root { 
+  --app-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+/* Color Palette - AdminKit style */
+:root {
+  /* Primary Colors */
+  --accent:      #3b82f6; /* Blue 500 - AdminKit primary */
+  --accent-2:    #6366f1; /* Indigo 500 - secondary */
+  --accent-3:    #10b981; /* Emerald 500 - success */
+  --danger:      #ef4444; /* Red 500 */
+  --warning:     #f59e0b; /* Amber 500 */
+  --info:        #06b6d4; /* Cyan 500 */
+
+  /* Neutral Grays - AdminKit style */
+  --g-950: #030712;   /* Gray 950 */
+  --g-900: #111827;   /* Gray 900 - main text */
+  --g-800: #1f2937;   /* Gray 800 */
+  --g-700: #374151;   /* Gray 700 */
+  --g-600: #4b5563;   /* Gray 600 - muted text */
+  --g-500: #6b7280;   /* Gray 500 */
+  --g-400: #9ca3af;   /* Gray 400 */
+  --g-300: #d1d5db;   /* Gray 300 */
+  --g-200: #e5e7eb;   /* Gray 200 */
+  --g-100: #f3f4f6;   /* Gray 100 - light surfaces */
+  --g-050: #f9fafb;   /* Gray 50 - background */
+  --white: #ffffff;
+
+  /* AdminKit specific variables - NOCH minimaler */
+  --adminkit-border-radius: .25rem;     /* 4px - sehr wenig */
+  --adminkit-border-radius-lg: .375rem; /* 6px - wenig */
+  --adminkit-border-radius-xl: .5rem;   /* 8px - maximum */
+  
+  /* SEHR subtile Schatten - wie AdminKit */
+  --adminkit-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+  --adminkit-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --adminkit-shadow-md: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+  --adminkit-shadow-lg: 0 4px 8px 0 rgb(0 0 0 / 0.08);
+
+  /* Bootstrap var overrides */
+  --bs-body-bg:           var(--g-050);
+  --bs-body-color:        var(--g-900);
+  --bs-primary:           var(--accent);
+  --bs-primary-rgb:       59, 130, 246;
+  --bs-secondary:         var(--g-600);
+  --bs-secondary-rgb:     75, 85, 99;
+  --bs-success:           var(--accent-3);
+  --bs-success-rgb:       16, 185, 129;
+  --bs-danger:            var(--danger);
+  --bs-danger-rgb:        239, 68, 68;
+  --bs-warning:           var(--warning);
+  --bs-warning-rgb:       245, 158, 11;
+  --bs-info:              var(--info);
+  --bs-info-rgb:          6, 182, 212;
+  --bs-link-color:        var(--accent);
+  --bs-link-hover-color:  #2563eb; /* Blue 600 */
+  --bs-border-radius:     var(--adminkit-border-radius);
+  --bs-border-radius-lg:  var(--adminkit-border-radius-lg);
+  --bs-border-radius-xl:  var(--adminkit-border-radius-xl);
+  --bs-border-color:      var(--g-200);
+}
+
+/* Dark Mode - AdminKit style */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bs-body-bg:   var(--g-950);
+    --bs-body-color: #f9fafb;
+    --g-050: var(--g-950);
+    --g-100: #1f2937;
+    --g-200: #374151;
+    --g-300: #4b5563;
+    --white: #1f2937;
+    --accent: #60a5fa; /* Blue 400 for dark mode */
+    --accent-2: #818cf8; /* Indigo 400 */
+    --accent-3: #34d399; /* Emerald 400 */
+  }
+}
+
+html[data-theme="dark"] :root {
+  --bs-body-bg:   var(--g-950);
+  --bs-body-color: #f9fafb;
+  --g-050: var(--g-950);
+  --g-100: #1f2937;
+  --g-200: #374151;
+  --g-300: #4b5563;
+  --white: #1f2937;
+  --accent: #60a5fa;
+  --accent-2: #818cf8;
+  --accent-3: #34d399;
+}
+
+/* Typography - AdminKit clean fonts */
+body { 
+  font-family: var(--app-font); 
+  font-weight: 400;
+  line-height: 1.6;
+  font-size: 0.875rem; /* 14px - AdminKit uses smaller base font */
+}
+
+h1, h2, h3, h4, h5, h6 { 
+  color: var(--g-900); 
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* App Layout - matching your existing structure */
+.kt-app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas: 
+    "aside topbar"
+    "aside main";
+}
+
+.kt-aside {
+  grid-area: aside;
+  background: var(--white);
+  border-right: 1px solid var(--g-200);
+  /* AdminKit uses very minimal shadow for sidebar */
+  box-shadow: var(--adminkit-shadow-sm);
+}
+
+.kt-topbar {
+  grid-area: topbar;
+  background: var(--white);
+  border-bottom: 1px solid var(--g-200);
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  height: 4rem; /* 64px */
+  /* Minimal shadow like AdminKit */
+  box-shadow: var(--adminkit-shadow-xs);
+}
+
+.kt-main {
+  grid-area: main;
+  padding: 1.5rem;
+  background: var(--g-050);
+}
+
+/* Brand/Logo area */
+.kt-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 4rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--g-200);
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.kt-brand .logo {
+  width: 32px;
+  height: 32px;
+  background: var(--accent);
+  border-radius: var(--adminkit-border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+}
+
+/* Navigation - AdminKit style */
+.kt-nav {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 0.75rem;
+}
+
+.kt-nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--adminkit-border-radius);
+  color: var(--g-700);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.15s ease;
+  margin-bottom: 0.125rem;
+}
+
+.kt-nav a:hover {
+  background: var(--g-100);
+  color: var(--g-900);
+}
+
+.kt-nav a.active {
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.kt-nav a .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  opacity: 0.75;
+}
+
+.kt-nav a.active .icon {
+  opacity: 1;
+}
+
+/* Topbar Actions */
+.kt-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Cards - AdminKit SEHR minimal (fast keine Schatten) */
+.card {
+  border: 1px solid var(--g-200);
+  background: var(--white);
+  border-radius: var(--adminkit-border-radius-lg);
+  /* KEIN box-shadow - wie AdminKit */
+  margin-bottom: 1.5rem;
+}
+
+.card-header {
+  border-bottom: 1px solid var(--g-200);
+  background: transparent;
+  padding: 1rem 1.25rem;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--g-900);
+}
+
+.card-body {
+  padding: 1.25rem;
+}
+
+/* Buttons - AdminKit style */
+.btn {
+  font-weight: 500;
+  font-size: 0.875rem;
+  border-radius: var(--adminkit-border-radius);
+  border: 1px solid transparent;
+  padding: 0.5rem 1rem;
+  transition: all 0.15s ease;
+  /* Remove heavy shadows */
+  box-shadow: none !important;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2563eb; /* Blue 600 */
+  border-color: #2563eb;
+  color: white;
+}
+
+.btn-outline-primary {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
+}
+
+.btn-outline-primary:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.btn-secondary {
+  background: var(--g-600);
+  border-color: var(--g-600);
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: var(--g-700);
+  border-color: var(--g-700);
+  color: white;
+}
+
+.btn-outline-secondary {
+  color: var(--g-600);
+  border-color: var(--g-300);
+  background: transparent;
+}
+
+.btn-outline-secondary:hover {
+  background: var(--g-100);
+  border-color: var(--g-400);
+  color: var(--g-700);
+}
+
+/* Forms - AdminKit clean style */
+.form-label {
+  font-weight: 500;
+  color: var(--g-700);
+  margin-bottom: 0.5rem;
+}
+
+.form-control,
+.form-select {
+  border: 1px solid var(--g-300);
+  border-radius: var(--adminkit-border-radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: var(--white);
+  color: var(--g-900);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
+  outline: none;
+}
+
+.form-text {
+  color: var(--g-500);
+  font-size: 0.75rem;
+}
+
+/* Tables - AdminKit style (minimale Rundung) */
+.table {
+  border-radius: var(--adminkit-border-radius);
+  overflow: hidden;
+  border: 1px solid var(--g-200);
+  margin-bottom: 0;
+}
+
+.table thead th {
+  background: var(--g-050);
+  color: var(--g-700);
+  border-bottom: 1px solid var(--g-200);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem;
+}
+
+.table tbody td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--g-100);
+  color: var(--g-700);
+  font-size: 0.875rem;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--g-050);
+}
+
+/* Badges - AdminKit style */
+.badge {
+  border-radius: var(--adminkit-border-radius);
+  padding: 0.25rem 0.5rem;
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+
+.badge.bg-success {
+  background: var(--accent-3) !important;
+  color: white;
+}
+
+.badge.bg-danger {
+  background: var(--danger) !important;
+  color: white;
+}
+
+.badge.bg-warning {
+  background: var(--warning) !important;
+  color: #92400e; /* Amber 800 for better contrast */
+}
+
+.badge.bg-info {
+  background: var(--info) !important;
+  color: white;
+}
+
+.badge.bg-secondary {
+  background: var(--g-600) !important;
+  color: white;
+}
+
+/* Accordion - AdminKit SEHR minimal (fast keine Schatten) */
+.accordion {
+  border: none;
+}
+
+.accordion-item {
+  border: 1px solid var(--g-200);
+  border-radius: var(--adminkit-border-radius);
+  margin-bottom: 0.5rem;
+  background: var(--white);
+  /* KEIN box-shadow */
+}
+
+.accordion-button {
+  border: none !important;
+  background: transparent !important;
+  border-radius: var(--adminkit-border-radius) !important;
+  padding: 1rem 1.25rem;
+  font-weight: 500;
+  color: var(--g-900);
+}
+
+.accordion-button:not(.collapsed) {
+  background: var(--g-050) !important;
+  color: var(--accent);
+}
+
+.accordion-button::after {
+  filter: none;
+}
+
+.accordion-button:not(.collapsed)::after {
+  filter: brightness(0) saturate(100%) invert(37%) sepia(95%) saturate(1650%) hue-rotate(205deg) brightness(98%) contrast(94%);
+}
+
+.accordion-body {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--g-200);
+}
+
+/* Alerts - AdminKit style (weniger rund) */
+.alert {
+  border: 1px solid;
+  border-radius: var(--adminkit-border-radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.alert-primary {
+  background: rgb(59 130 246 / 0.1);
+  border-color: rgb(59 130 246 / 0.2);
+  color: #1e40af; /* Blue 800 */
+}
+
+.alert-success {
+  background: rgb(16 185 129 / 0.1);
+  border-color: rgb(16 185 129 / 0.2);
+  color: #047857; /* Emerald 800 */
+}
+
+.alert-danger {
+  background: rgb(239 68 68 / 0.1);
+  border-color: rgb(239 68 68 / 0.2);
+  color: #dc2626; /* Red 600 */
+}
+
+.alert-warning {
+  background: rgb(245 158 11 / 0.1);
+  border-color: rgb(245 158 11 / 0.2);
+  color: #92400e; /* Amber 800 */
+}
+
+/* Sticky Actions Bar */
+.kt-sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 100;
+  background: var(--white);
+  border-top: 1px solid var(--g-200);
+  padding: 1rem 1.5rem;
+  margin: 1.5rem -1.5rem -1.5rem -1.5rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  /* AdminKit minimal shadow */
+  box-shadow: 0 -1px 3px 0 rgb(0 0 0 / 0.1), 0 -1px 2px -1px rgb(0 0 0 / 0.1);
+}
+
+/* Mobile Responsive */
+@media (max-width: 991.98px) {
+  .kt-app {
+    grid-template-columns: 1fr;
+    grid-template-areas: 
+      "topbar"
+      "main";
+  }
+  
+  .kt-aside {
+    position: fixed;
+    inset: 0 30% 0 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1040;
+    box-shadow: var(--adminkit-shadow-lg);
+  }
+  
+  .kt-aside.show {
+    transform: translateX(0);
+  }
+  
+  .kt-main {
+    padding: 1rem;
+  }
+  
+  .kt-sticky-actions {
+    margin: 1rem -1rem -1rem -1rem;
+    padding: 1rem;
+  }
+}
+
+/* Backdrop for mobile sidebar */
+.kt-aside-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease;
+  z-index: 1039;
+}
+
+.kt-aside-backdrop.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Utilities */
+.shadow-adminkit-xs { box-shadow: var(--adminkit-shadow-xs) !important; }
+.shadow-adminkit-sm { box-shadow: var(--adminkit-shadow-sm) !important; }
+.shadow-adminkit-md { box-shadow: var(--adminkit-shadow-md) !important; }
+.shadow-adminkit-lg { box-shadow: var(--adminkit-shadow-lg) !important; }
+
+.rounded-adminkit { border-radius: var(--adminkit-border-radius) !important; }
+.rounded-adminkit-lg { border-radius: var(--adminkit-border-radius-lg) !important; }
+.rounded-adminkit-xl { border-radius: var(--adminkit-border-radius-xl) !important; }
+
+/* Info Icons */
+.info-icon {
+  font-size: 0.875rem;
+  color: var(--g-400);
+  cursor: help;
+  vertical-align: middle;
+}
+
+.info-icon:hover {
+  color: var(--accent);
+}
+
+/* Loading States - AdminKit style */
+.skeleton {
+  background: linear-gradient(90deg, var(--g-200) 25%, var(--g-100) 50%, var(--g-200) 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: var(--adminkit-border-radius);
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Auth Layout */
+.auth-wrap {
+  min-height: calc(100vh - 4rem);
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  background: var(--g-050);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid var(--g-200);
+  border-radius: var(--adminkit-border-radius);
+  background: var(--white);
+  /* Nur minimaler Schatten für Auth */
+  box-shadow: var(--adminkit-shadow-sm);
+  padding: 2rem;
+}
+
+/* Custom scrollbar - AdminKit style */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--g-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--g-300);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--g-400);
+}

@@ -9,6 +9,7 @@ use App\View;
 use App\Settings;
 use App\Flash;
 use App\AuditLogger;
+use App\SystemLogger;
 use PDO;
 
 final class ProtocolsController
@@ -241,6 +242,9 @@ final class ProtocolsController
             header('Location: /protocols');
             return;
         }
+
+        // Protokoll-Anzeige loggen
+        \App\SystemLogger::logProtocolViewed($id, (string)($p['tenant_name'] ?? 'Unbekannt'));
 
         // Stammdaten laden
         $owners = $pdo->query("SELECT id,name,company FROM owners WHERE deleted_at IS NULL ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
@@ -649,6 +653,9 @@ final class ProtocolsController
             $currentUser = Auth::user()['email'] ?? 'system';
             $pdo->prepare("INSERT INTO protocol_events (id, protocol_id, type, message, created_at) VALUES (UUID(), ?, 'other', ?, NOW())")
                 ->execute([$id, "Version $nextVersion erstellt von $currentUser"]);
+                
+            // SystemLogger: Protokoll aktualisiert
+            SystemLogger::logProtocolAction('protocol_updated', $id, "Version $nextVersion erstellt");
         } catch (\Throwable $e) {
             error_log("Event-Logging fehlgeschlagen: ".$e->getMessage());
         }

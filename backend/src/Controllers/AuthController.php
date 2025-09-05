@@ -8,6 +8,7 @@ use App\Flash;
 use App\Auth;
 use App\Database;
 use App\Csrf;
+use App\SystemLogger;
 use PDO;
 
 final class AuthController
@@ -80,6 +81,9 @@ final class AuthController
         $u = $st->fetch(PDO::FETCH_ASSOC);
 
         if (!$u || empty($u['password_hash']) || !password_verify($pass, (string)$u['password_hash'])) {
+            // Login fehlgeschlagen - SystemLogger
+            SystemLogger::log('login', "Login fehlgeschlagen für '$email'", null, null, ['success' => false]);
+            
             Flash::add('error', 'Login fehlgeschlagen. Bitte Zugangsdaten prüfen.');
             header('Location: /login?error=1'); 
             return;
@@ -94,6 +98,9 @@ final class AuthController
         ];
         session_regenerate_id(true);
         
+        // Login erfolgreich - SystemLogger
+        SystemLogger::logLogin($email);
+        
         Flash::add('success', 'Erfolgreich angemeldet.');
         header('Location: /protocols');
     }
@@ -102,6 +109,10 @@ final class AuthController
     public function logout(): void
     {
         Auth::start();
+        
+        // User für Logging ermitteln (vor Session-Zerstörung)
+        $user = Auth::user();
+        $userEmail = $user['email'] ?? 'unknown';
         
         // CSRF-Tokens bereinigen
         Csrf::cleanup();
@@ -122,6 +133,10 @@ final class AuthController
         }
         
         session_destroy();
+        
+        // Logout protokollieren
+        SystemLogger::logLogout($userEmail);
+        
         Flash::add('info', 'Sie wurden abgemeldet.');
         header('Location: /login');
     }

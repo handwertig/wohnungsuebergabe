@@ -202,6 +202,12 @@ switch ($path) {
         (new SettingsController())->brandingDeleteLogo();
         break;
 
+    // NEUE ROUTE: System-Log
+    case '/settings/systemlogs':
+        Auth::requireAuth();
+        (new SettingsController())->systemLogs();
+        break;
+
     // Owners / Managers / Objects
     case '/owners':
         Auth::requireAuth();
@@ -264,6 +270,28 @@ switch ($path) {
     case '/objects/delete':
         Auth::requireAuth();
         (new ObjectsController())->delete();
+        break;
+
+    // Benutzerverwaltung (neue Admin-Routes)
+    case '/users':
+        Auth::requireAuth();
+        (new UsersController())->index();
+        break;
+
+    case '/users/new':
+    case '/users/edit':
+        Auth::requireAuth();
+        (new UsersController())->form();
+        break;
+
+    case '/users/save':
+        Auth::requireAuth();
+        (new UsersController())->save();
+        break;
+
+    case '/users/delete':
+        Auth::requireAuth();
+        (new UsersController())->delete();
         break;
 
     // 404 JSON

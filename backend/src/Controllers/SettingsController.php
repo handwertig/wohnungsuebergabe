@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Auth;
+use App\UserAuth;
 use App\Settings;
 use App\View;
 use App\Database;
@@ -16,63 +17,130 @@ class SettingsController {
 
     private function tabs(string $active = ''): string {
         $tabs = [
-            'general'   => ['Stammdaten', '/settings'],
-            'mail'      => ['Mail', '/settings/mail'],
-            'docusign'  => ['DocuSign', '/settings/docusign'],
-            'texts'     => ['Textbausteine', '/settings/texts'],
-            'users'     => ['Benutzer', '/settings/users'],
-            'branding'  => ['Gestaltung', '/settings/branding']
+            'general'   => ['Stammdaten', '/settings', 'bi-database'],
+            'mail'      => ['E-Mail', '/settings/mail', 'bi-envelope'],
+            'docusign'  => ['DocuSign', '/settings/docusign', 'bi-file-earmark-text'],
+            'texts'     => ['Textbausteine', '/settings/texts', 'bi-card-text'],
+            'users'     => ['Benutzer', '/settings/users', 'bi-people'],
+            'branding'  => ['Design', '/settings/branding', 'bi-palette'],
+            'systemlogs' => ['System-Log', '/settings/systemlogs', 'bi-list-ul']
         ];
 
-        $html = '<ul class="nav nav-tabs mb-4">';
-        foreach ($tabs as $key => [$label, $url]) {
-            $class = ($key === $active) ? 'nav-link active' : 'nav-link';
-            $html .= '<li class="nav-item"><a class="'.$class.'" href="'.$url.'">'.$label.'</a></li>';
+        $html = '<div class="mb-4">';
+        $html .= '<ul class="nav nav-pills nav-fill bg-light rounded-3 p-1">';
+        foreach ($tabs as $key => [$label, $url, $icon]) {
+            $isActive = ($key === $active);
+            $class = $isActive ? 'nav-link active text-white' : 'nav-link text-muted';
+            $html .= '<li class="nav-item">';
+            $html .= '<a class="'.$class.'" href="'.$url.'">';
+            $html .= '<i class="'.$icon.' me-2"></i>'.$label;
+            $html .= '</a></li>';
         }
         $html .= '</ul>';
+        $html .= '</div>';
         return $html;
     }
 
-    /* ---------- Stammdaten (Links zu Objekten, Eigentümer, Hausverwaltungen) ---------- */
+    /* ---------- Stammdaten (Links zu Objekten, Eigentümer, Hausverwaltungen + Eigenes Profil) ---------- */
     public function general(): void {
         Auth::requireAuth();
+        $user = Auth::user();
+        if (!$user) {
+            header('Location: /login');
+            return;
+        }
         
         $body = $this->tabs('general');
-        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Stammdaten</h1>';
-        $body .= '<p class="text-muted">Hier finden Sie die Verwaltung aller Stammdaten Ihrer Immobilien und Kontakte.</p>';
-        $body .= '</div></div>';
         
-        $body .= '<div class="row g-3 mt-3">';
+        // Sauberer AdminKit-Header ohne große Icons
+        $body .= '<div class="mb-4">';
+        $body .= '<h2 class="h4 mb-1">Stammdaten</h2>';
+        $body .= '<p class="text-muted">Verwalten Sie Ihre Immobilien, Kontakte und Ihr Profil</p>';
+        $body .= '</div>';
+        
+        // Kompakte Stammdaten-Karten (AdminKit-Style)
+        $body .= '<div class="row g-3 mb-4">';
         
         // Objekte
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-primary">Objekte</div>';
-        $body .= '<p class="text-muted small mb-2">Immobilienobjekte und Wohneinheiten verwalten.</p>';
-        $body .= '<a class="btn btn-outline-primary" href="/objects">Objekte öffnen</a>';
+        $body .= '<div class="col-md-4">';
+        $body .= '<div class="card h-100">';
+        $body .= '<div class="card-body p-3">';
+        $body .= '<div class="d-flex align-items-center mb-2">';
+        $body .= '<i class="bi bi-building text-primary me-2"></i>';
+        $body .= '<h6 class="card-title mb-0">Objekte</h6>';
+        $body .= '</div>';
+        $body .= '<p class="text-muted small mb-3">Immobilienobjekte und Wohneinheiten verwalten</p>';
+        $body .= '<a class="btn btn-outline-primary btn-sm" href="/objects">Verwalten</a>';
         $body .= '</div></div></div>';
         
         // Eigentümer
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-success">Eigentümer</div>';
-        $body .= '<p class="text-muted small mb-2">Eigentümer anlegen und bearbeiten.</p>';
-        $body .= '<a class="btn btn-outline-success" href="/owners">Eigentümer öffnen</a>';
+        $body .= '<div class="col-md-4">';
+        $body .= '<div class="card h-100">';
+        $body .= '<div class="card-body p-3">';
+        $body .= '<div class="d-flex align-items-center mb-2">';
+        $body .= '<i class="bi bi-person-check text-success me-2"></i>';
+        $body .= '<h6 class="card-title mb-0">Eigentümer</h6>';
+        $body .= '</div>';
+        $body .= '<p class="text-muted small mb-3">Eigentümer anlegen und bearbeiten</p>';
+        $body .= '<a class="btn btn-outline-primary btn-sm" href="/owners">Verwalten</a>';
         $body .= '</div></div></div>';
         
         // Hausverwaltungen
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-warning">Hausverwaltungen</div>';
-        $body .= '<p class="text-muted small mb-2">Hausverwaltungen anlegen und bearbeiten.</p>';
-        $body .= '<a class="btn btn-outline-warning" href="/managers">Hausverwaltungen öffnen</a>';
+        $body .= '<div class="col-md-4">';
+        $body .= '<div class="card h-100">';
+        $body .= '<div class="card-body p-3">';
+        $body .= '<div class="d-flex align-items-center mb-2">';
+        $body .= '<i class="bi bi-briefcase text-warning me-2"></i>';
+        $body .= '<h6 class="card-title mb-0">Hausverwaltungen</h6>';
+        $body .= '</div>';
+        $body .= '<p class="text-muted small mb-3">Hausverwaltungen anlegen und bearbeiten</p>';
+        $body .= '<a class="btn btn-outline-primary btn-sm" href="/managers">Verwalten</a>';
         $body .= '</div></div></div>';
         
         $body .= '</div>';
+        
+        // Eigenes Profil (Stammdaten)
+        $body .= $this->renderOwnProfile($user);
         
         View::render('Einstellungen – Stammdaten', $body);
     }
 
     public function generalSave(): void {
         Auth::requireAuth();
-        \App\Flash::add('info', 'Stammdaten werden über die jeweiligen Bereiche verwaltet.');
+        $pdo = Database::pdo();
+        $user = Auth::user();
+        if (!$user) {
+            header('Location: /login');
+            return;
+        }
+        
+        $uid = (string)$user['id'];
+        
+        $company = trim((string)($_POST['company'] ?? ''));
+        $phone = trim((string)($_POST['phone'] ?? ''));
+        $address = trim((string)($_POST['address'] ?? ''));
+        $newEmail = trim((string)($_POST['email'] ?? ''));
+        $password = (string)($_POST['password'] ?? '');
+        
+        // Aktualisiere Profildaten in der users-Tabelle
+        $stmt = $pdo->prepare('UPDATE users SET company=?, phone=?, address=?, updated_at=NOW() WHERE id=?');
+        $stmt->execute([$company, $phone, $address, $uid]);
+        
+        // E-Mail aktualisieren falls geändert
+        if ($newEmail !== '' && $newEmail !== $user['email']) {
+            $stmt = $pdo->prepare('UPDATE users SET email=?, updated_at=NOW() WHERE id=?');
+            $stmt->execute([$newEmail, $uid]);
+            $_SESSION['user']['email'] = $newEmail;
+        }
+        
+        // Passwort aktualisieren falls angegeben
+        if ($password !== '') {
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            $stmt = $pdo->prepare('UPDATE users SET password_hash=?, updated_at=NOW() WHERE id=?');
+            $stmt->execute([$hash, $uid]);
+        }
+
+        \App\Flash::add('success', 'Profil gespeichert.');
         header('Location: /settings');
     }
 
@@ -209,7 +277,7 @@ class SettingsController {
         header('Location: /settings/texts');
     }
 
-    /* ---------- Benutzer (eigenes Profil) ---------- */
+    /* ---------- Benutzer (nur Benutzerverwaltung für Admins) ---------- */
     public function users(): void {
         Auth::requireAuth();
         $user = Auth::user(); 
@@ -218,57 +286,136 @@ class SettingsController {
             return; 
         }
         
-        $uid = (string)$user['id'];
-        $company = Settings::get("user:$uid:company", '');
-        $addr = Settings::get("user:$uid:address", '');
-        $phone = Settings::get("user:$uid:phone", '');
-        $email = (string)$user['email'];
-
         $body = $this->tabs('users');
-        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Eigenes Profil</h1>';
-        $body .= '<form method="post" action="/settings/users/save" class="row g-3">';
-        $body .= '<div class="col-md-6"><label class="form-label">Firma</label><input class="form-control" name="company" value="'.$this->esc($company).'"></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">Telefon</label><input class="form-control" name="phone" value="'.$this->esc($phone).'"></div>';
-        $body .= '<div class="col-12"><label class="form-label">Adresse</label><textarea class="form-control" rows="3" name="address">'.$this->esc($addr).'</textarea></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">E‑Mail</label><input type="email" class="form-control" name="email" value="'.$this->esc($email).'"></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">Neues Passwort</label><input type="password" class="form-control" name="password" placeholder="Leer lassen für keine Änderung"></div>';
-        $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
-        $body .= '</form></div></div>';
+        
+        // Nur Admin sieht die Benutzerverwaltung
+        if (UserAuth::isAdmin()) {
+            $body .= '<div class="card">';
+            $body .= '<div class="card-body">';
+            $body .= '<h5 class="card-title text-primary mb-3">Benutzerverwaltung</h5>';
+            $body .= '<p class="card-text text-muted mb-4">Verwalten Sie alle Benutzer und deren Rechte im System.</p>';
+            
+            $body .= '<div class="row g-3 mb-4">';
+            $body .= '<div class="col-md-4">';
+            $body .= '<div class="card bg-light">';
+            $body .= '<div class="card-body text-center">';
+            $body .= '<div class="h6 text-danger">Administrator</div>';
+            $body .= '<p class="small text-muted mb-0">Vollzugriff auf alle Funktionen</p>';
+            $body .= '</div></div></div>';
+            
+            $body .= '<div class="col-md-4">';
+            $body .= '<div class="card bg-light">';
+            $body .= '<div class="card-body text-center">';
+            $body .= '<div class="h6 text-warning">Hausverwaltung</div>';
+            $body .= '<p class="small text-muted mb-0">Nur zugewiesene Verwaltungen</p>';
+            $body .= '</div></div></div>';
+            
+            $body .= '<div class="col-md-4">';
+            $body .= '<div class="card bg-light">';
+            $body .= '<div class="card-body text-center">';
+            $body .= '<div class="h6 text-success">Eigentümer</div>';
+            $body .= '<p class="small text-muted mb-0">Nur zugewiesene Eigentümer</p>';
+            $body .= '</div></div></div>';
+            $body .= '</div>';
+            
+            $body .= '<div class="d-flex gap-2">';
+            $body .= '<a href="/users" class="btn btn-primary">Benutzerverwaltung öffnen</a>';
+            $body .= '<a href="/settings" class="btn btn-outline-secondary">Eigenes Profil bearbeiten</a>';
+            $body .= '</div>';
+            
+            $body .= '</div></div>';
+        } else {
+            // Normale Benutzer werden zu Stammdaten weitergeleitet
+            $body .= '<div class="card">';
+            $body .= '<div class="card-body text-center py-5">';
+            $body .= '<h5 class="text-muted mb-3">Zugriff verweigert</h5>';
+            $body .= '<p class="text-muted mb-4">Die Benutzerverwaltung ist nur für Administratoren verfügbar.</p>';
+            $body .= '<a href="/settings" class="btn btn-primary">Zu den Stammdaten</a>';
+            $body .= '</div></div>';
+        }
+        
         View::render('Einstellungen – Benutzer', $body);
+    }
+    
+    private function renderOwnProfile(array $user): string {
+        $uid = (string)$user['id'];
+        $pdo = Database::pdo();
+        
+        // Hole aktuelle Daten aus der users-Tabelle
+        try {
+            $stmt = $pdo->prepare('SELECT email, company, phone, address FROM users WHERE id = ?');
+            $stmt->execute([$uid]);
+            $userData = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            // Fallback: Falls neue Spalten noch nicht existieren
+            $userData = ['email' => $user['email'], 'company' => '', 'phone' => '', 'address' => ''];
+        }
+        
+        $email = $userData['email'] ?? $user['email'];
+        $company = $userData['company'] ?? '';
+        $phone = $userData['phone'] ?? '';
+        $address = $userData['address'] ?? '';
+        
+        $html = '<div class="card">';
+        $html .= '<div class="card-header">';
+        $html .= '<h5 class="mb-0"><i class="bi bi-person-circle me-2"></i>Mein Profil</h5>';
+        $html .= '<small class="text-muted">Bearbeiten Sie Ihre persönlichen Angaben</small>';
+        $html .= '</div>';
+        
+        $html .= '<div class="card-body p-4">';
+        $html .= '<form method="post" action="/settings/general/save" class="row g-3">';
+        
+        $html .= '<div class="col-md-6">';
+        $html .= '<label class="form-label">Firma</label>';
+        $html .= '<input class="form-control" name="company" value="'.$this->esc($company).'" placeholder="Firmenname (optional)">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-6">';
+        $html .= '<label class="form-label">Telefon</label>';
+        $html .= '<input class="form-control" name="phone" value="'.$this->esc($phone).'" placeholder="+49 xxx xxxxxxx">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-12">';
+        $html .= '<label class="form-label">Adresse</label>';
+        $html .= '<textarea class="form-control" rows="3" name="address" placeholder="Straße, PLZ Ort">'.$this->esc($address).'</textarea>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-6">';
+        $html .= '<label class="form-label">E-Mail</label>';
+        $html .= '<input type="email" class="form-control" name="email" value="'.$this->esc($email).'" required>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-6">';
+        $html .= '<label class="form-label">Neues Passwort</label>';
+        $html .= '<input type="password" class="form-control" name="password" placeholder="Leer lassen für keine Änderung">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-12 mt-4">';
+        $html .= '<button class="btn btn-primary"><i class="bi bi-check-circle me-2"></i>Profil speichern</button>';
+        $html .= '</div>';
+        
+        $html .= '</form>';
+        $html .= '</div></div>';
+        
+        return $html;
     }
 
     public function usersSave(): void {
         Auth::requireAuth();
-        $pdo = Database::pdo();
         $user = Auth::user();
         if (!$user) {
             header('Location: /login');
             return;
         }
         
-        $uid = (string)$user['id'];
-        
-        Settings::setMany([
-            "user:$uid:company" => (string)(isset($_POST['company']) ? $_POST['company'] : ''),
-            "user:$uid:address" => (string)(isset($_POST['address']) ? $_POST['address'] : ''),
-            "user:$uid:phone" => (string)(isset($_POST['phone']) ? $_POST['phone'] : ''),
-        ]);
-
-        $newEmail = (string)(isset($_POST['email']) ? $_POST['email'] : '');
-        if ($newEmail !== '' && $newEmail !== $user['email']) {
-            $st = $pdo->prepare('UPDATE users SET email=?, updated_at=NOW() WHERE id=?');
-            $st->execute(array($newEmail, $uid));
-            $_SESSION['user']['email'] = $newEmail;
+        // Nur Admins können diese Route verwenden (Fallback-Schutz)
+        if (!UserAuth::isAdmin()) {
+            \App\Flash::add('error', 'Zugriff verweigert.');
+            header('Location: /settings');
+            return;
         }
         
-        $pw = (string)(isset($_POST['password']) ? $_POST['password'] : '');
-        if ($pw !== '') {
-            $hash = password_hash($pw, PASSWORD_BCRYPT);
-            $st = $pdo->prepare('UPDATE users SET password_hash=?, updated_at=NOW() WHERE id=?');
-            $st->execute(array($hash, $uid));
-        }
-
-        \App\Flash::add('success', 'Profil gespeichert.');
+        \App\Flash::add('info', 'Die Benutzerverwaltung erfolgt unter /users. Eigenes Profil unter Stammdaten.');
         header('Location: /settings/users');
     }
 
@@ -369,5 +516,319 @@ class SettingsController {
         }
 
         header('Location: /settings/branding');
+    }
+
+    /* ---------- System-Log (technische Darstellung) ---------- */
+    public function systemLogs(): void {
+        Auth::requireAuth();
+        
+        // Stelle sicher, dass initiale Daten vorhanden sind
+        \App\SystemLogger::addInitialData();
+        
+        // Logge den Besuch dieser Seite
+        \App\SystemLogger::log('settings_viewed', 'System-Log Seite aufgerufen');
+        
+        // Filter-Parameter
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $search = trim((string)($_GET['search'] ?? ''));
+        $actionFilter = (string)($_GET['action'] ?? '');
+        $userFilter = (string)($_GET['user'] ?? '');
+        $dateFrom = (string)($_GET['date_from'] ?? '');
+        $dateTo = (string)($_GET['date_to'] ?? '');
+        
+        // Logs laden
+        $result = \App\SystemLogger::getLogs(
+            $page,
+            50, // Pro Seite - weniger für bessere Performance
+            $search ?: null,
+            $actionFilter ?: null,
+            $userFilter ?: null,
+            $dateFrom ?: null,
+            $dateTo ?: null
+        );
+        
+        $logs = $result['logs'];
+        $pagination = $result['pagination'];
+        
+        // Verfügbare Filter-Optionen
+        $availableActions = \App\SystemLogger::getAvailableActions();
+        $availableUsers = \App\SystemLogger::getAvailableUsers();
+        
+        $body = $this->tabs('systemlogs');
+        
+        // Inline CSS nur für diese Seite
+        $body .= '<style>';
+        $body .= '.systemlog-header { background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%); border-radius: var(--adminkit-border-radius-lg); position: relative; }';
+        $body .= '.systemlog-header::before { content: ""; position: absolute; top: 10px; left: 15px; width: 12px; height: 12px; border-radius: 50%; background: #ff5f56; box-shadow: 20px 0 #ffbd2e, 40px 0 #27ca3f; }';
+        $body .= '.systemlog-table { font-family: "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace; font-size: 0.8rem; line-height: 1.3; }';
+        $body .= '.systemlog-table td { padding: 0.4rem 0.6rem !important; vertical-align: middle; border-bottom: 1px solid rgba(0,0,0,0.05); }';
+        $body .= '.systemlog-table tbody tr:hover { background-color: rgba(59, 130, 246, 0.05); transform: translateX(2px); transition: all 0.15s ease; }';
+        $body .= '.systemlog-table .badge.action-login { background: #10b981 !important; }';
+        $body .= '.systemlog-table .badge.action-logout { background: #f59e0b !important; }';
+        $body .= '.systemlog-table .badge.action-created { background: #3b82f6 !important; }';
+        $body .= '.systemlog-table .badge.action-updated { background: #6366f1 !important; }';
+        $body .= '.systemlog-table .badge.action-deleted { background: #ef4444 !important; }';
+        $body .= '.systemlog-table .badge.action-viewed { background: #6b7280 !important; }';
+        $body .= '.systemlog-table .badge.action-sent { background: #059669 !important; }';
+        $body .= '.systemlog-table .badge.action-failed { background: #dc2626 !important; }';
+        $body .= '.systemlog-table .badge.action-generated { background: #7c3aed !important; }';
+        $body .= '.systemlog-table .badge.action-exported { background: #ea580c !important; }';
+        $body .= '.systemlog-pagination { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: var(--adminkit-border-radius-lg); font-family: "Menlo", "Monaco", "Consolas", monospace; }';
+        $body .= '.status-online::before { content: ""; width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; animation: pulse 2s infinite; margin-right: 0.25rem; }';
+        $body .= '@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }';
+        $body .= '.live-indicator { position: relative; overflow: hidden; }';
+        $body .= '.live-indicator::after { content: ""; position: absolute; top: 0; left: -100%; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #10b981, transparent); animation: sweep 3s infinite; }';
+        $body .= '@keyframes sweep { 0% { left: -100%; } 100% { left: 100%; } }';
+        $body .= '</style>';
+        
+        // Technischer Header
+        $body .= '<div class="bg-dark text-white p-3 rounded mb-3 systemlog-header live-indicator">';
+        $body .= '<div class="d-flex justify-content-between align-items-center">';
+        $body .= '<div>';
+        $body .= '<h1 class="h6 mb-1"><i class="bi bi-terminal me-2"></i>System Audit Log</h1>';
+        $body .= '<small class="opacity-75">Comprehensive system activity tracking & monitoring</small>';
+        $body .= '</div>';
+        $body .= '<div class="font-monospace small">';
+        $body .= '<span class="badge bg-success me-2 status-online">ONLINE</span>';
+        $body .= 'Records: <strong>'.$pagination['total_count'].'</strong>';
+        $body .= '</div>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        // Kompakte Filterleiste
+        $body .= '<div class="card mb-3">';
+        $body .= '<div class="card-body py-2">';
+        $body .= '<form method="get" action="/settings/systemlogs" class="row g-2 align-items-end">';
+        
+        // Kompakte Filter
+        $body .= '<div class="col-md-3">';
+        $body .= '<label class="form-label small mb-1">Search Query</label>';
+        $body .= '<input class="form-control form-control-sm font-monospace" name="search" value="'.$this->esc($search).'" placeholder="action|user|details...">';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-2">';
+        $body .= '<label class="form-label small mb-1">Action Type</label>';
+        $body .= '<select class="form-select form-select-sm" name="action">';
+        $body .= '<option value="">*</option>';
+        foreach ($availableActions as $action) {
+            $selected = ($action === $actionFilter) ? ' selected' : '';
+            $body .= '<option value="'.$this->esc($action).'"'.$selected.'>'.$this->esc($action).'</option>';
+        }
+        $body .= '</select>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-2">';
+        $body .= '<label class="form-label small mb-1">User</label>';
+        $body .= '<select class="form-select form-select-sm" name="user">';
+        $body .= '<option value="">*</option>';
+        foreach ($availableUsers as $user) {
+            $selected = ($user === $userFilter) ? ' selected' : '';
+            $displayUser = strlen($user) > 15 ? substr($user, 0, 12) . '...' : $user;
+            $body .= '<option value="'.$this->esc($user).'"'.$selected.' title="'.$this->esc($user).'">'.$this->esc($displayUser).'</option>';
+        }
+        $body .= '</select>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-2">';
+        $body .= '<label class="form-label small mb-1">Date Range</label>';
+        $body .= '<div class="input-group input-group-sm">';
+        $body .= '<input class="form-control" type="date" name="date_from" value="'.$this->esc($dateFrom).'" title="From">';
+        $body .= '<input class="form-control" type="date" name="date_to" value="'.$this->esc($dateTo).'" title="To">';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-3">';
+        $body .= '<div class="btn-group btn-group-sm w-100">';
+        $body .= '<button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Query</button>';
+        $body .= '<a href="/settings/systemlogs" class="btn btn-outline-secondary">Reset</a>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        $body .= '</form>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        // Kompakte Status-Leiste
+        $body .= '<div class="d-flex justify-content-between align-items-center mb-3 small text-muted">';
+        $body .= '<div class="font-monospace">';
+        $body .= 'Total: <strong>'.$pagination['total_count'].'</strong> | ';
+        $body .= 'Page: <strong>'.$pagination['current_page'].'/'.$pagination['total_pages'].'</strong> | ';
+        $body .= 'Showing: <strong>'.count($logs).'</strong> | ';
+        $body .= 'Per Page: <strong>'.$pagination['per_page'].'</strong>';
+        $body .= '</div>';
+        $body .= '<div>';
+        $body .= '<span class="badge bg-secondary">Live Monitoring</span>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        // Technische Log-Tabelle
+        if (empty($logs)) {
+            $body .= '<div class="card">';
+            $body .= '<div class="card-body text-center py-5 bg-light">';
+            $body .= '<i class="bi bi-database text-muted" style="font-size: 3rem;"></i>';
+            $body .= '<div class="h6 text-muted mt-3">No log entries found</div>';
+            $body .= '<div class="small text-muted">Try adjusting your filters or date range</div>';
+            $body .= '</div>';
+            $body .= '</div>';
+        } else {
+            $body .= '<div class="table-responsive">';
+            $body .= '<table class="table table-sm table-striped mb-0 systemlog-table">';
+            $body .= '<thead class="table-dark">';
+            $body .= '<tr>';
+            $body .= '<th style="width: 130px;">Timestamp</th>';
+            $body .= '<th style="width: 100px;">User</th>';
+            $body .= '<th style="width: 120px;">Action</th>';
+            $body .= '<th style="width: 80px;">Entity</th>';
+            $body .= '<th>Details</th>';
+            $body .= '<th style="width: 100px;">IP</th>';
+            $body .= '</tr>';
+            $body .= '</thead>';
+            $body .= '<tbody class="font-monospace">';
+            
+            foreach ($logs as $log) {
+                $body .= '<tr class="align-middle">';
+                
+                // Kompakter Zeitstempel
+                $timestamp = date('H:i:s', strtotime($log['timestamp']));
+                $date = date('m-d', strtotime($log['timestamp']));
+                $body .= '<td><div class="text-primary fw-bold">'.$this->esc($timestamp).'</div>';
+                $body .= '<div class="text-muted" style="font-size: 0.75rem;">'.$this->esc($date).'</div></td>';
+                
+                // Kompakter Benutzer
+                $userParts = explode('@', $log['user_email']);
+                $shortUser = $userParts[0];
+                if (strlen($shortUser) > 8) $shortUser = substr($shortUser, 0, 8) . '.';
+                $body .= '<td><span class="badge bg-secondary" title="'.$this->esc($log['user_email']).'">'.$this->esc($shortUser).'</span></td>';
+                
+                // Kompakte Aktion
+                $actionClass = $this->getActionBadgeClass($log['action']);
+                $shortAction = str_replace(['_', 'protocol_', 'settings_'], ['', 'p_', 's_'], $log['action']);
+                if (strlen($shortAction) > 12) $shortAction = substr($shortAction, 0, 12) . '.';
+                $body .= '<td><span class="badge '.$actionClass.' font-monospace" title="'.$this->esc($log['action']).'">'.$this->esc($shortAction).'</span></td>';
+                
+                // Kompakte Entity
+                if ($log['entity_type']) {
+                    $entityShort = substr($log['entity_type'], 0, 1) . substr($log['entity_type'], -1);
+                    $entityId = $log['entity_id'] ? substr($log['entity_id'], 0, 6) : '';
+                    $body .= '<td><div class="text-info fw-bold">'.$this->esc($entityShort).'</div>';
+                    if ($entityId) {
+                        $body .= '<div class="text-muted" style="font-size: 0.7rem;">'.$this->esc($entityId).'</div>';
+                    }
+                    $body .= '</td>';
+                } else {
+                    $body .= '<td><span class="text-muted">—</span></td>';
+                }
+                
+                // Kompakte Details
+                $details = $log['details'];
+                if ($details) {
+                    $shortDetails = strlen($details) > 60 ? substr($details, 0, 60) . '...' : $details;
+                    $body .= '<td class="text-truncate" title="'.$this->esc($details).'" style="max-width: 300px; font-family: system-ui;">'.$this->esc($shortDetails).'</td>';
+                } else {
+                    $body .= '<td><span class="text-muted">—</span></td>';
+                }
+                
+                // Kompakte IP
+                if ($log['ip_address']) {
+                    $ipParts = explode('.', $log['ip_address']);
+                    $shortIp = count($ipParts) >= 4 ? $ipParts[0].'.'.$ipParts[1].'.x.x' : $log['ip_address'];
+                    $body .= '<td><span class="text-warning" title="'.$this->esc($log['ip_address']).'">'.$this->esc($shortIp).'</span></td>';
+                } else {
+                    $body .= '<td><span class="text-muted">—</span></td>';
+                }
+                
+                $body .= '</tr>';
+            }
+            
+            $body .= '</tbody>';
+            $body .= '</table>';
+            $body .= '</div>';
+        }
+        
+        // Kompakte technische Pagination
+        if ($pagination['total_pages'] > 1) {
+            $body .= '<div class="d-flex justify-content-between align-items-center mt-3 p-3 systemlog-pagination">';
+            $body .= '<div class="font-monospace small text-muted">';
+            $body .= 'Page '.$pagination['current_page'].'/'.$pagination['total_pages'].' | ';
+            $body .= 'Records '.((($pagination['current_page']-1) * $pagination['per_page']) + 1).'-';
+            $body .= min($pagination['current_page'] * $pagination['per_page'], $pagination['total_count']);
+            $body .= ' of '.$pagination['total_count'];
+            $body .= '</div>';
+            
+            $body .= '<div class="btn-group btn-group-sm">';
+            
+            // Erste Seite
+            if ($pagination['current_page'] > 2) {
+                $firstUrl = '/settings/systemlogs?page=1';
+                if ($search) $firstUrl .= '&search='.urlencode($search);
+                if ($actionFilter) $firstUrl .= '&action='.urlencode($actionFilter);
+                if ($userFilter) $firstUrl .= '&user='.urlencode($userFilter);
+                if ($dateFrom) $firstUrl .= '&date_from='.urlencode($dateFrom);
+                if ($dateTo) $firstUrl .= '&date_to='.urlencode($dateTo);
+                $body .= '<a class="btn btn-outline-secondary" href="'.$firstUrl.'" title="First">⟪</a>';
+            }
+            
+            // Vorherige Seite
+            if ($pagination['has_prev']) {
+                $prevUrl = '/settings/systemlogs?page='.($pagination['current_page'] - 1);
+                if ($search) $prevUrl .= '&search='.urlencode($search);
+                if ($actionFilter) $prevUrl .= '&action='.urlencode($actionFilter);
+                if ($userFilter) $prevUrl .= '&user='.urlencode($userFilter);
+                if ($dateFrom) $prevUrl .= '&date_from='.urlencode($dateFrom);
+                if ($dateTo) $prevUrl .= '&date_to='.urlencode($dateTo);
+                $body .= '<a class="btn btn-outline-primary" href="'.$prevUrl.'" title="Previous">‹</a>';
+            } else {
+                $body .= '<span class="btn btn-outline-secondary disabled">‹</span>';
+            }
+            
+            // Aktuelle Seite
+            $body .= '<span class="btn btn-primary">'.$pagination['current_page'].'</span>';
+            
+            // Nächste Seite
+            if ($pagination['has_next']) {
+                $nextUrl = '/settings/systemlogs?page='.($pagination['current_page'] + 1);
+                if ($search) $nextUrl .= '&search='.urlencode($search);
+                if ($actionFilter) $nextUrl .= '&action='.urlencode($actionFilter);
+                if ($userFilter) $nextUrl .= '&user='.urlencode($userFilter);
+                if ($dateFrom) $nextUrl .= '&date_from='.urlencode($dateFrom);
+                if ($dateTo) $nextUrl .= '&date_to='.urlencode($dateTo);
+                $body .= '<a class="btn btn-outline-primary" href="'.$nextUrl.'" title="Next">›</a>';
+            } else {
+                $body .= '<span class="btn btn-outline-secondary disabled">›</span>';
+            }
+            
+            // Letzte Seite
+            if ($pagination['current_page'] < $pagination['total_pages'] - 1) {
+                $lastUrl = '/settings/systemlogs?page='.$pagination['total_pages'];
+                if ($search) $lastUrl .= '&search='.urlencode($search);
+                if ($actionFilter) $lastUrl .= '&action='.urlencode($actionFilter);
+                if ($userFilter) $lastUrl .= '&user='.urlencode($userFilter);
+                if ($dateFrom) $lastUrl .= '&date_from='.urlencode($dateFrom);
+                if ($dateTo) $lastUrl .= '&date_to='.urlencode($dateTo);
+                $body .= '<a class="btn btn-outline-secondary" href="'.$lastUrl.'" title="Last">⟫</a>';
+            }
+            
+            $body .= '</div>';
+            $body .= '</div>';
+        }
+        
+        View::render('Einstellungen – System-Log', $body);
+    }
+    
+    /**
+     * Bestimmt die Bootstrap-Badge-Klasse basierend auf der Aktion
+     */
+    private function getActionBadgeClass(string $action): string {
+        if (str_contains($action, 'login')) return 'bg-success action-login';
+        if (str_contains($action, 'logout')) return 'bg-warning action-logout';
+        if (str_contains($action, 'failed')) return 'bg-danger action-failed';
+        if (str_contains($action, 'created')) return 'bg-primary action-created';
+        if (str_contains($action, 'deleted')) return 'bg-danger action-deleted';
+        if (str_contains($action, 'updated') || str_contains($action, 'changed')) return 'bg-info action-updated';
+        if (str_contains($action, 'sent') || str_contains($action, 'email')) return 'bg-success action-sent';
+        if (str_contains($action, 'pdf') || str_contains($action, 'generated')) return 'bg-secondary action-generated';
+        if (str_contains($action, 'exported')) return 'bg-warning action-exported';
+        if (str_contains($action, 'viewed')) return 'bg-light text-dark action-viewed';
+        return 'bg-light text-dark';
     }
 }

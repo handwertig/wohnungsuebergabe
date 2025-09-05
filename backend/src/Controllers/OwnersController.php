@@ -13,13 +13,47 @@ use PDO;
 
 final class OwnersController 
 {
+    private function esc(?string $str): string {
+        return htmlspecialchars($str ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    private function renderBreadcrumb(string $action = ''): string {
+        $html = '<nav aria-label="breadcrumb" class="mb-4">';
+        $html .= '<ol class="breadcrumb bg-light rounded-3 p-3">';
+        $html .= '<li class="breadcrumb-item">';
+        $html .= '<a href="/settings" class="text-decoration-none">';
+        $html .= '<i class="bi bi-gear me-1"></i>Einstellungen';
+        $html .= '</a></li>';
+        $html .= '<li class="breadcrumb-item">';
+        $html .= '<a href="/settings" class="text-decoration-none">';
+        $html .= '<i class="bi bi-database me-1"></i>Stammdaten';
+        $html .= '</a></li>';
+        $html .= '<li class="breadcrumb-item">';
+        if ($action) {
+            $html .= '<a href="/owners" class="text-decoration-none">';
+            $html .= '<i class="bi bi-person-check me-1"></i>Eigentümer';
+            $html .= '</a></li>';
+            $html .= '<li class="breadcrumb-item active" aria-current="page">';
+            $html .= '<i class="bi bi-' . ($action === 'new' ? 'person-plus' : 'pencil') . ' me-1"></i>';
+            $html .= ($action === 'new' ? 'Neuer Eigentümer' : 'Bearbeiten');
+        } else {
+            $html .= '<span class="text-dark">';
+            $html .= '<i class="bi bi-person-check me-1"></i>Eigentümer';
+            $html .= '</span>';
+        }
+        $html .= '</li>';
+        $html .= '</ol></nav>';
+        return $html;
+    }
     public function index(): void 
     {
         Auth::requireAuth();
         $pdo = Database::pdo();
         $rows = $pdo->query('SELECT id,name,company,email,phone FROM owners WHERE deleted_at IS NULL ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
         
-        $html = '<div class="d-flex justify-content-between align-items-center mb-3">';
+        $html = $this->renderBreadcrumb();
+        
+        $html .= '<div class="d-flex justify-content-between align-items-center mb-3">';
         $html .= '<h1 class="h4 mb-0">Eigentümer</h1>';
         $html .= '<a class="btn btn-sm btn-primary" href="/owners/new">Neu</a>';
         $html .= '</div>';
@@ -31,10 +65,10 @@ final class OwnersController
         
         foreach ($rows as $r) {
             $html .= '<tr>';
-            $html .= '<td>'.htmlspecialchars($r['name']).'</td>';
-            $html .= '<td>'.htmlspecialchars($r['company'] ?? '').'</td>';
-            $html .= '<td>'.htmlspecialchars($r['email'] ?? '').'</td>';
-            $html .= '<td>'.htmlspecialchars($r['phone'] ?? '').'</td>';
+            $html .= '<td>'.$this->esc($r['name']).'</td>';
+            $html .= '<td>'.$this->esc($r['company'] ?? '').'</td>';
+            $html .= '<td>'.$this->esc($r['email'] ?? '').'</td>';
+            $html .= '<td>'.$this->esc($r['phone'] ?? '').'</td>';
             $html .= '<td class="text-end">';
             $html .= '<a class="btn btn-sm btn-outline-secondary me-2" href="/owners/edit?id='.$r['id'].'">Bearbeiten</a>';
             $html .= '<a class="btn btn-sm btn-outline-danger" href="/owners/delete?id='.$r['id'].'" onclick="return confirm(\'Wirklich löschen?\')">Löschen</a>';
@@ -61,29 +95,31 @@ final class OwnersController
             }
         }
         
-        $html = '<h1 class="h4 mb-3">'.($id ? 'Eigentümer bearbeiten' : 'Eigentümer anlegen').'</h1>';
+        $html = $this->renderBreadcrumb($id ? 'edit' : 'new');
+        
+        $html .= '<h1 class="h4 mb-3">'.($id ? 'Eigentümer bearbeiten' : 'Eigentümer anlegen').'</h1>';
         $html .= '<form method="post" action="/owners/save">';
-        $html .= '<input type="hidden" name="id" value="'.htmlspecialchars((string)$data['id']).'">';
+        $html .= '<input type="hidden" name="id" value="'.$this->esc((string)$data['id']).'">';
         $html .= '<div class="row g-3">';
         $html .= '<div class="col-md-6">';
         $html .= '<label class="form-label">Name *</label>';
-        $html .= '<input required class="form-control" name="name" value="'.htmlspecialchars($data['name']).'">';
+        $html .= '<input required class="form-control" name="name" value="'.$this->esc($data['name']).'">';
         $html .= '</div>';
         $html .= '<div class="col-md-6">';
         $html .= '<label class="form-label">Firma</label>';
-        $html .= '<input class="form-control" name="company" value="'.htmlspecialchars((string)$data['company']).'">';
+        $html .= '<input class="form-control" name="company" value="'.$this->esc((string)$data['company']).'">';
         $html .= '</div>';
         $html .= '<div class="col-12">';
         $html .= '<label class="form-label">Adresse</label>';
-        $html .= '<input class="form-control" name="address" value="'.htmlspecialchars((string)$data['address']).'">';
+        $html .= '<input class="form-control" name="address" value="'.$this->esc((string)$data['address']).'">';
         $html .= '</div>';
         $html .= '<div class="col-md-6">';
         $html .= '<label class="form-label">E-Mail</label>';
-        $html .= '<input type="email" class="form-control" name="email" value="'.htmlspecialchars((string)$data['email']).'">';
+        $html .= '<input type="email" class="form-control" name="email" value="'.$this->esc((string)$data['email']).'">';
         $html .= '</div>';
         $html .= '<div class="col-md-6">';
         $html .= '<label class="form-label">Telefon</label>';
-        $html .= '<input class="form-control" name="phone" value="'.htmlspecialchars((string)$data['phone']).'">';
+        $html .= '<input class="form-control" name="phone" value="'.$this->esc((string)$data['phone']).'">';
         $html .= '</div>';
         $html .= '</div>';
         $html .= '<div class="mt-3 d-flex gap-2">';
@@ -131,7 +167,7 @@ final class OwnersController
                 $vals['phone'] ?: null,
                 $id
             ]);
-            if (class_exists('App\AuditLogger')) {
+            if (class_exists('App\\AuditLogger')) {
                 AuditLogger::log('owners', $id, 'update', $vals);
             }
             Flash::add('success','Eigentümer aktualisiert.');
@@ -144,7 +180,7 @@ final class OwnersController
                 $vals['email'] ?: null,
                 $vals['phone'] ?: null
             ]);
-            if (class_exists('App\AuditLogger')) {
+            if (class_exists('App\\AuditLogger')) {
                 AuditLogger::log('owners', 'UUID()', 'create', $vals);
             }
             Flash::add('success','Eigentümer angelegt.');
@@ -163,7 +199,7 @@ final class OwnersController
             $pdo = Database::pdo();
             $st = $pdo->prepare('UPDATE owners SET deleted_at=NOW() WHERE id=?');
             $st->execute([$id]);
-            if (class_exists('App\AuditLogger')) {
+            if (class_exists('App\\AuditLogger')) {
                 AuditLogger::log('owners', $id, 'delete', []);
             }
             Flash::add('success','Eigentümer gelöscht.');
@@ -173,67 +209,3 @@ final class OwnersController
         exit;
     }
 }
-
-    /** Erweiterte save() Methode mit CSRF-Protection */
-    public function save(): void 
-    {
-        Auth::requireAuth();
-        
-        // CSRF-Token validieren
-        Csrf::requireValidToken();
-        
-        $pdo = Database::pdo();
-        $id = $_POST['id'] ?? '';
-        
-        $vals = [
-            'name'    => trim((string)($_POST['name'] ?? '')),
-            'company' => trim((string)($_POST['company'] ?? '')),
-            'address' => trim((string)($_POST['address'] ?? '')),
-            'email'   => trim((string)($_POST['email'] ?? '')),
-            'phone'   => trim((string)($_POST['phone'] ?? '')),
-        ];
-        
-        $errors = Validation::required($vals, ['name']);
-        if ($vals['email'] && !filter_var($vals['email'], FILTER_VALIDATE_EMAIL)) {
-            $errors['email'] = 'Ungültige E-Mail-Adresse';
-        }
-
-        if ($errors) {
-            Flash::add('error', 'Bitte Eingaben prüfen.');
-            $_SESSION['_form'] = $vals;
-            header('Location: '.($id ? '/owners/edit?id='.$id : '/owners/new')); 
-            exit;
-        }
-
-        if ($id) {
-            $stmt = $pdo->prepare('UPDATE owners SET name=?, company=?, address=?, email=?, phone=?, updated_at=NOW() WHERE id=?');
-            $stmt->execute([
-                $vals['name'],
-                $vals['company'] ?: null,
-                $vals['address'] ?: null,
-                $vals['email'] ?: null,
-                $vals['phone'] ?: null,
-                $id
-            ]);
-            if (class_exists('App\AuditLogger')) {
-                AuditLogger::log('owners', $id, 'update', $vals);
-            }
-            Flash::add('success','Eigentümer aktualisiert.');
-        } else {
-            $stmt = $pdo->prepare('INSERT INTO owners (id,name,company,address,email,phone,created_at) VALUES (UUID(),?,?,?,?,?,NOW())');
-            $stmt->execute([
-                $vals['name'],
-                $vals['company'] ?: null,
-                $vals['address'] ?: null,
-                $vals['email'] ?: null,
-                $vals['phone'] ?: null
-            ]);
-            if (class_exists('App\AuditLogger')) {
-                AuditLogger::log('owners', 'UUID()', 'create', $vals);
-            }
-            Flash::add('success','Eigentümer angelegt.');
-        }
-        
-        header('Location: /owners'); 
-        exit;
-    }
