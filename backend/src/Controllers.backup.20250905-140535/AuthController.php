@@ -62,13 +62,10 @@ final class AuthController
     {
         $email = trim((string)($_POST['email'] ?? ''));
         $pass  = (string)($_POST['password'] ?? '');
-        
         if ($email === '' || $pass === '') {
             Flash::add('error', 'Login fehlgeschlagen. Bitte Zugangsdaten prüfen.');
-            header('Location: /login?error=1'); 
-            return;
+            header('Location: /login?error=1'); return;
         }
-        
         $pdo = Database::pdo();
         $st  = $pdo->prepare('SELECT id, email, password_hash, role FROM users WHERE email=? LIMIT 1');
         $st->execute([$email]);
@@ -76,19 +73,12 @@ final class AuthController
 
         if (!$u || empty($u['password_hash']) || !password_verify($pass, (string)$u['password_hash'])) {
             Flash::add('error', 'Login fehlgeschlagen. Bitte Zugangsdaten prüfen.');
-            header('Location: /login?error=1'); 
-            return;
+            header('Location: /login?error=1'); return;
         }
 
-        // Session starten und User setzen
         Auth::start();
-        $_SESSION['user'] = [
-            'id' => $u['id'],
-            'email' => $u['email'],
-            'role' => $u['role']
-        ];
+        $_SESSION['user'] = ['id'=>$u['id'],'email'=>$u['email'],'role'=>$u['role']];
         session_regenerate_id(true);
-        
         header('Location: /protocols');
     }
 
@@ -97,20 +87,10 @@ final class AuthController
     {
         Auth::start();
         $_SESSION = [];
-        
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
-            setcookie(
-                session_name(), 
-                '', 
-                time() - 42000, 
-                $p['path'], 
-                $p['domain'], 
-                $p['secure'], 
-                $p['httponly']
-            );
+            setcookie(session_name(), '', time()-42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
         }
-        
         session_destroy();
         header('Location: /login');
     }
