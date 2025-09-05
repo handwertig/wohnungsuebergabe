@@ -38,6 +38,37 @@ switch ($path) {
     case '/health':
         (new HomeController())->index();
         break;
+        
+    // Logo endpoint
+    case '/logo':
+        $logo = '';
+        try {
+            if (class_exists('App\Settings')) {
+                $logo = \App\Settings::get('pdf_logo_path', '');
+            }
+        } catch (\Throwable $e) {
+            $logo = '';
+        }
+        
+        if ($logo && is_file($logo)) {
+            $ext = strtolower(pathinfo($logo, PATHINFO_EXTENSION));
+            $mimeType = match($ext) {
+                'jpg', 'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+                'gif' => 'image/gif',
+                'svg' => 'image/svg+xml',
+                default => 'image/png'
+            };
+            
+            header('Content-Type: ' . $mimeType);
+            header('Cache-Control: public, max-age=3600');
+            readfile($logo);
+        } else {
+            http_response_code(404);
+            header('Content-Type: text/plain');
+            echo 'Logo not found';
+        }
+        exit;
 
     // Auth
     case '/login':

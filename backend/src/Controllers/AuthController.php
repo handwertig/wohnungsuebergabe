@@ -17,6 +17,17 @@ final class AuthController
     public function loginForm(): void
     {
         $flashes = Flash::pull();
+        
+        // Logo aus Einstellungen laden
+        $logo = '';
+        try {
+            if (class_exists('App\Settings')) {
+                $logo = \App\Settings::get('pdf_logo_path', '');
+            }
+        } catch (\Throwable $e) {
+            $logo = '';
+        }
+        
         ob_start(); ?>
         <!DOCTYPE html>
         <html lang="de">
@@ -38,6 +49,19 @@ final class AuthController
                         <div class="d-table-cell align-middle">
                             
                             <div class="text-center mt-4">
+                                <?php if ($logo && is_file($logo)): ?>
+                                    <div class="mb-3">
+                                        <img src="/logo" alt="Logo" style="height: 64px; max-width: 200px; object-fit: contain;">
+                                    </div>
+                                <?php else: ?>
+                                    <div class="mb-3">
+                                        <div class="d-inline-flex align-items-center gap-2">
+                                            <div style="width: 48px; height: 48px; background: #3b82f6; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.5rem;">W</div>
+                                            <h3 class="mb-0 text-dark">Wohnungsübergabe</h3>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
+                                
                                 <h1 class="h2">Willkommen!</h1>
                                 <p class="lead">Melden Sie sich in Ihrem Konto an, um fortzufahren</p>
                             </div>
