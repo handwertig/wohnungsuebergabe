@@ -323,7 +323,7 @@ final class ProtocolsController
                   <?php foreach ($rooms as $idx => $room): ?>
                     <div class="card mb-3 room-item">
                       <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">Raum <?= $idx + 1 ?>: <?= $h((string)($room['name'] ?? 'Unbenannt')) ?></h6>
+                        <h6 class="mb-0">Raum <?= ((int)$idx + 1) ?>: <?= $h((string)($room['name'] ?? 'Unbenannt')) ?></h6>
                         <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRoom(this)">Entfernen</button>
                       </div>
                       <div class="card-body">
@@ -528,7 +528,7 @@ final class ProtocolsController
             const roomHtml = `
                 <div class="card mb-3 room-item">
                   <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">Raum ${roomIndex + 1}: <span class="room-name">Neuer Raum</span></h6>
+                    <h6 class="mb-0">Raum ${parseInt(roomIndex) + 1}: <span class="room-name">Neuer Raum</span></h6>
                     <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRoom(this)">Entfernen</button>
                   </div>
                   <div class="card-body">
@@ -900,7 +900,7 @@ final class ProtocolsController
                   <?php foreach ($rooms as $idx => $room): ?>
                     <div class="card mb-3 room-item">
                       <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">Raum <?= $idx + 1 ?>: <?= $h((string)($room['name'] ?? 'Unbenannt')) ?></h6>
+                        <h6 class="mb-0">Raum <?= ((int)$idx + 1) ?>: <?= $h((string)($room['name'] ?? 'Unbenannt')) ?></h6>
                         <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRoom(this)">Entfernen</button>
                       </div>
                       <div class="card-body">
@@ -1261,7 +1261,7 @@ final class ProtocolsController
             const roomHtml = `
                 <div class="card mb-3 room-item">
                   <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">Raum ${roomIndex + 1}: <span class="room-name">Neuer Raum</span></h6>
+                    <h6 class="mb-0">Raum ${parseInt(roomIndex) + 1}: <span class="room-name">Neuer Raum</span></h6>
                     <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRoom(this)">Entfernen</button>
                   </div>
                   <div class="card-body">
