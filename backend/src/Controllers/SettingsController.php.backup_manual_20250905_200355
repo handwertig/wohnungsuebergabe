@@ -33,38 +33,36 @@ class SettingsController {
         return $html;
     }
 
-    /* ---------- Stammdaten (Links zu Objekten, Eigentümer, Hausverwaltungen) ---------- */
+    /* ---------- Allgemeine Einstellungen ---------- */
     public function general(): void {
         Auth::requireAuth();
-        
+        $companyName = Settings::get('company_name', '');
+        $companyAddress = Settings::get('company_address', '');
+        $companyPhone = Settings::get('company_phone', '');
+        $companyEmail = Settings::get('company_email', '');
+
         $body = $this->tabs('general');
         $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Stammdaten</h1>';
-        $body .= '<p class="text-muted">Hier finden Sie die Verwaltung aller Stammdaten Ihrer Immobilien und Kontakte.</p>';
-        $body .= '</div></div>';
+        $body .= '<form method="post" action="/settings/general/save" class="row g-3">';
+        $body .= '<div class="col-md-6"><label class="form-label">Firmenname</label><input class="form-control" name="company_name" value="'.$this->esc($companyName).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">Telefon</label><input class="form-control" name="company_phone" value="'.$this->esc($companyPhone).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">E-Mail</label><input class="form-control" type="email" name="company_email" value="'.$this->esc($companyEmail).'"></div>';
+        $body .= '<div class="col-12"><label class="form-label">Adresse</label><textarea class="form-control" name="company_address" rows="3">'.$this->esc($companyAddress).'</textarea></div>';
+        $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
+        $body .= '</form></div></div>';
         
+        // Links zu Eigentümer und Hausverwaltungen hinzufügen (WIEDERHERGESTELLT)
         $body .= '<div class="row g-3 mt-3">';
-        
-        // Objekte
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-primary">Objekte</div>';
-        $body .= '<p class="text-muted small mb-2">Immobilienobjekte und Wohneinheiten verwalten.</p>';
-        $body .= '<a class="btn btn-outline-primary" href="/objects">Objekte öffnen</a>';
-        $body .= '</div></div></div>';
-        
-        // Eigentümer
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-success">Eigentümer</div>';
+        $body .= '<div class="col-md-6"><div class="card"><div class="card-body">';
+        $body .= '<div class="h6">Eigentümer</div>';
         $body .= '<p class="text-muted small mb-2">Eigentümer anlegen und bearbeiten.</p>';
-        $body .= '<a class="btn btn-outline-success" href="/owners">Eigentümer öffnen</a>';
+        $body .= '<a class="btn btn-outline-primary" href="/owners">Eigentümer öffnen</a>';
         $body .= '</div></div></div>';
-        
-        // Hausverwaltungen
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-warning">Hausverwaltungen</div>';
+        $body .= '<div class="col-md-6"><div class="card"><div class="card-body">';
+        $body .= '<div class="h6">Hausverwaltungen</div>';
         $body .= '<p class="text-muted small mb-2">Hausverwaltungen anlegen und bearbeiten.</p>';
-        $body .= '<a class="btn btn-outline-warning" href="/managers">Hausverwaltungen öffnen</a>';
+        $body .= '<a class="btn btn-outline-primary" href="/managers">Hausverwaltungen öffnen</a>';
         $body .= '</div></div></div>';
-        
         $body .= '</div>';
         
         View::render('Einstellungen – Stammdaten', $body);
@@ -72,7 +70,13 @@ class SettingsController {
 
     public function generalSave(): void {
         Auth::requireAuth();
-        \App\Flash::add('info', 'Stammdaten werden über die jeweiligen Bereiche verwaltet.');
+        Settings::setMany([
+            'company_name' => (string)(isset($_POST['company_name']) ? $_POST['company_name'] : ''),
+            'company_address' => (string)(isset($_POST['company_address']) ? $_POST['company_address'] : ''),
+            'company_phone' => (string)(isset($_POST['company_phone']) ? $_POST['company_phone'] : ''),
+            'company_email' => (string)(isset($_POST['company_email']) ? $_POST['company_email'] : '')
+        ]);
+        \App\Flash::add('success', 'Stammdaten gespeichert.');
         header('Location: /settings');
     }
 
@@ -146,7 +150,7 @@ class SettingsController {
         header('Location: /settings/docusign');
     }
 
-    /* ---------- Textbausteine (legal_texts versioniert) ---------- */
+    /* ---------- Textbausteine (legal_texts versioniert) - WIEDERHERGESTELLT ---------- */
     public function texts(): void {
         Auth::requireAuth();
         $pdo = Database::pdo();
@@ -166,18 +170,22 @@ class SettingsController {
         $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Textbausteine (versioniert)</h1>';
         $body .= '<form method="post" action="/settings/texts/save" class="row g-4">';
         
+        // Datenschutz
         $body .= '<div class="col-12"><h2 class="h6">Datenschutz (v'.$this->esc((string)$datenschutz['version']).')</h2>';
         $body .= '<label class="form-label">Titel</label><input class="form-control" name="ds_title" value="'.$this->esc((string)$datenschutz['title']).'">';
         $body .= '<label class="form-label mt-2">Inhalt</label><textarea class="form-control" rows="6" name="ds_content">'.$this->esc((string)$datenschutz['content']).'</textarea></div>';
         
+        // Entsorgung
         $body .= '<div class="col-12"><h2 class="h6">Entsorgung (v'.$this->esc((string)$entsorgung['version']).')</h2>';
         $body .= '<label class="form-label">Titel</label><input class="form-control" name="en_title" value="'.$this->esc((string)$entsorgung['title']).'">';
         $body .= '<label class="form-label mt-2">Inhalt</label><textarea class="form-control" rows="6" name="en_content">'.$this->esc((string)$entsorgung['content']).'</textarea></div>';
         
+        // Marketing
         $body .= '<div class="col-12"><h2 class="h6">Marketing (v'.$this->esc((string)$marketing['version']).')</h2>';
         $body .= '<label class="form-label">Titel</label><input class="form-control" name="mk_title" value="'.$this->esc((string)$marketing['title']).'">';
         $body .= '<label class="form-label mt-2">Inhalt</label><textarea class="form-control" rows="6" name="mk_content">'.$this->esc((string)$marketing['content']).'</textarea></div>';
         
+        // Kaution (4. Textbaustein)
         $body .= '<div class="col-12"><h2 class="h6">Hinweis zur Kautionsrückzahlung (v'.$this->esc((string)$kaution['version']).')</h2>';
         $body .= '<label class="form-label">Titel</label><input class="form-control" name="ka_title" value="'.$this->esc((string)$kaution['title']).'">';
         $body .= '<label class="form-label mt-2">Inhalt</label><textarea class="form-control" rows="6" name="ka_content">'.$this->esc((string)$kaution['content']).'</textarea></div>';
@@ -209,7 +217,7 @@ class SettingsController {
         header('Location: /settings/texts');
     }
 
-    /* ---------- Benutzer (eigenes Profil) ---------- */
+    /* ---------- Benutzer (eigenes Profil) - WIEDERHERGESTELLT ---------- */
     public function users(): void {
         Auth::requireAuth();
         $user = Auth::user(); 
@@ -248,6 +256,7 @@ class SettingsController {
         
         $uid = (string)$user['id'];
         
+        // Benutzerdaten speichern
         Settings::setMany([
             "user:$uid:company" => (string)(isset($_POST['company']) ? $_POST['company'] : ''),
             "user:$uid:address" => (string)(isset($_POST['address']) ? $_POST['address'] : ''),
@@ -307,10 +316,12 @@ class SettingsController {
         $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
         $body .= '</form>';
         
+        // Separates Formular für Logo-Löschung (unsichtbar)
         $body .= '<form id="deleteLogoForm" method="post" action="/settings/branding/delete-logo" style="display: none;">';
         $body .= '<input type="hidden" name="delete_logo" value="1">';
         $body .= '</form>';
         
+        // JavaScript für Logo-Löschung
         $body .= '<script>';
         $body .= 'function deleteLogo() {';
         $body .= '  if (confirm("Möchten Sie das Logo wirklich entfernen? Es wird dann wieder der Text \\"Wohnungsübergabe\\" angezeigt.")) {';
@@ -345,6 +356,9 @@ class SettingsController {
         header('Location: /settings/branding');
     }
 
+    /**
+     * NEUE FUNKTION: Logo löschen
+     */
     public function brandingDeleteLogo(): void {
         Auth::requireAuth();
         

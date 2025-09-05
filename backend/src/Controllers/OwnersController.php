@@ -173,3 +173,67 @@ final class OwnersController
         exit;
     }
 }
+
+    /** Erweiterte save() Methode mit CSRF-Protection */
+    public function save(): void 
+    {
+        Auth::requireAuth();
+        
+        // CSRF-Token validieren
+        Csrf::requireValidToken();
+        
+        $pdo = Database::pdo();
+        $id = $_POST['id'] ?? '';
+        
+        $vals = [
+            'name'    => trim((string)($_POST['name'] ?? '')),
+            'company' => trim((string)($_POST['company'] ?? '')),
+            'address' => trim((string)($_POST['address'] ?? '')),
+            'email'   => trim((string)($_POST['email'] ?? '')),
+            'phone'   => trim((string)($_POST['phone'] ?? '')),
+        ];
+        
+        $errors = Validation::required($vals, ['name']);
+        if ($vals['email'] && !filter_var($vals['email'], FILTER_VALIDATE_EMAIL)) {
+            $errors['email'] = 'Ungültige E-Mail-Adresse';
+        }
+
+        if ($errors) {
+            Flash::add('error', 'Bitte Eingaben prüfen.');
+            $_SESSION['_form'] = $vals;
+            header('Location: '.($id ? '/owners/edit?id='.$id : '/owners/new')); 
+            exit;
+        }
+
+        if ($id) {
+            $stmt = $pdo->prepare('UPDATE owners SET name=?, company=?, address=?, email=?, phone=?, updated_at=NOW() WHERE id=?');
+            $stmt->execute([
+                $vals['name'],
+                $vals['company'] ?: null,
+                $vals['address'] ?: null,
+                $vals['email'] ?: null,
+                $vals['phone'] ?: null,
+                $id
+            ]);
+            if (class_exists('App\AuditLogger')) {
+                AuditLogger::log('owners', $id, 'update', $vals);
+            }
+            Flash::add('success','Eigentümer aktualisiert.');
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO owners (id,name,company,address,email,phone,created_at) VALUES (UUID(),?,?,?,?,?,NOW())');
+            $stmt->execute([
+                $vals['name'],
+                $vals['company'] ?: null,
+                $vals['address'] ?: null,
+                $vals['email'] ?: null,
+                $vals['phone'] ?: null
+            ]);
+            if (class_exists('App\AuditLogger')) {
+                AuditLogger::log('owners', 'UUID()', 'create', $vals);
+            }
+            Flash::add('success','Eigentümer angelegt.');
+        }
+        
+        header('Location: /owners'); 
+        exit;
+    }

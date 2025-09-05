@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker exec:*)",
+      "Bash(chmod:*)",
+      "Bash(./restore-functions.sh)",
+      "Bash(./fix.sh)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

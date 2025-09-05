@@ -7,11 +7,12 @@ use App\View;
 use App\Flash;
 use App\Auth;
 use App\Database;
+use App\Csrf;
 use PDO;
 
 final class AuthController
 {
-    /** GET: /login – gestaltete Login-Maske im Flat-Design */
+    /** GET: /login – gestaltete Login-Maske mit CSRF-Protection */
     public function loginForm(): void
     {
         $flashes = Flash::pull();
@@ -31,6 +32,7 @@ final class AuthController
               <?php endforeach; ?>
 
               <form method="post" action="/login" novalidate>
+                <?= Csrf::tokenField() ?>
                 <div class="mb-3">
                   <label class="form-label">E‑Mail</label>
                   <input class="form-control" type="email" name="email" required autocomplete="username">
@@ -46,7 +48,7 @@ final class AuthController
                   </div>
                   <a class="small" href="/password/forgot">Passwort vergessen?</a>
                 </div>
-                <button class="btn btn-primary w-100">Einloggen</button>
+                <button class="btn btn-primary w-100">Einloggen 🔐</button>
               </form>
             </div>
             <div class="card-footer small text-muted">&copy; <?= date('Y') ?> Wohnungsübergabe</div>
@@ -57,9 +59,12 @@ final class AuthController
         View::render('Login', $html);
     }
 
-    /** POST: /login */
+    /** POST: /login - mit CSRF-Validation */
     public function login(): void
     {
+        // CSRF-Token validieren
+        Csrf::requireValidToken();
+        
         $email = trim((string)($_POST['email'] ?? ''));
         $pass  = (string)($_POST['password'] ?? '');
         
@@ -89,6 +94,7 @@ final class AuthController
         ];
         session_regenerate_id(true);
         
+        Flash::add('success', 'Erfolgreich angemeldet.');
         header('Location: /protocols');
     }
 
@@ -96,6 +102,10 @@ final class AuthController
     public function logout(): void
     {
         Auth::start();
+        
+        // CSRF-Tokens bereinigen
+        Csrf::cleanup();
+        
         $_SESSION = [];
         
         if (ini_get('session.use_cookies')) {
@@ -112,6 +122,7 @@ final class AuthController
         }
         
         session_destroy();
+        Flash::add('info', 'Sie wurden abgemeldet.');
         header('Location: /login');
     }
 }

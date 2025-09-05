@@ -1,0 +1,577 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use App\Auth;
+use App\Database;
+use App\View;
+use App\Flash;
+use App\Csrf;
+use PDO;
+
+final class ProtocolsController
+{
+    /** GET: /protocols - Übersicht aller Protokolle */
+    public function index(): void
+    {
+        Auth::requireAuth();
+        $pdo = Database::pdo();
+        
+        // Protokolle mit JOIN zu Einheiten und Objekten laden
+        $sql = "SELECT p.id, p.type, p.tenant_name, p.created_at, p.updated_at,
+                       u.label as unit_label, o.city, o.street, o.house_no
+                FROM protocols p 
+                JOIN units u ON u.id = p.unit_id 
+                JOIN objects o ON o.id = u.object_id 
+                WHERE p.deleted_at IS NULL 
+                ORDER BY p.created_at DESC";
+        
+        $protocols = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        
+        $html = '<div class="page-header">';
+        $html .= '<div class="d-flex justify-content-between align-items-center">';
+        $html .= '<h1 class="mb-0">Protokolle</h1>';
+        $html .= '<a class="btn btn-primary" href="/protocols/wizard/start">';
+        $html .= '<i class="bi bi-plus-circle me-2"></i>Neues Protokoll';
+        $html .= '</a>';
+        $html .= '</div>';
+        $html .= '</div>';
+        
+        if (empty($protocols)) {
+            $html .= '<div class="card">';
+            $html .= '<div class="card-body text-center py-5">';
+            $html .= '<i class="bi bi-file-text" style="font-size: 3rem; color: #6c757d;"></i>';
+            $html .= '<h3 class="mt-3 text-muted">Noch keine Protokolle</h3>';
+            $html .= '<p class="text-muted">Erstellen Sie Ihr erstes Wohnungsübergabeprotokoll.</p>';
+            $html .= '<a class="btn btn-primary" href="/protocols/wizard/start">Protokoll erstellen</a>';
+            $html .= '</div>';
+            $html .= '</div>';
+        } else {
+            $html .= '<div class="card">';
+            $html .= '<div class="table-responsive">';
+            $html .= '<table class="table table-hover mb-0">';
+            $html .= '<thead>';
+            $html .= '<tr>';
+            $html .= '<th>Adresse</th>';
+            $html .= '<th>Einheit</th>';
+            $html .= '<th>Mieter</th>';
+            $html .= '<th>Typ</th>';
+            $html .= '<th>Erstellt</th>';
+            $html .= '<th class="text-end">Aktionen</th>';
+            $html .= '</tr>';
+            $html .= '</thead>';
+            $html .= '<tbody>';
+            
+            foreach ($protocols as $p) {
+                $address = htmlspecialchars(($p['street'] ?? '') . ' ' . ($p['house_no'] ?? '') . ', ' . ($p['city'] ?? ''));
+                $unit = htmlspecialchars($p['unit_label'] ?? '');
+                $tenant = htmlspecialchars($p['tenant_name'] ?? '');
+                $type = htmlspecialchars($p['type'] ?? '');
+                $created = htmlspecialchars($p['created_at'] ?? '');
+                
+                // Typ-Badge
+                $typeBadge = match($type) {
+                    'einzug' => '<span class="badge bg-success">Einzug</span>',
+                    'auszug' => '<span class="badge bg-danger">Auszug</span>',
+                    'zwischenprotokoll' => '<span class="badge bg-warning">Zwischenprotokoll</span>',
+                    default => '<span class="badge bg-secondary">' . ucfirst($type) . '</span>'
+                };
+                
+                $html .= '<tr>';
+                $html .= '<td>' . $address . '</td>';
+                $html .= '<td>' . $unit . '</td>';
+                $html .= '<td>' . $tenant . '</td>';
+                $html .= '<td>' . $typeBadge . '</td>';
+                $html .= '<td>' . date('d.m.Y H:i', strtotime($created)) . '</td>';
+                $html .= '<td class="text-end">';
+                $html .= '<div class="btn-group btn-group-sm">';
+                $html .= '<a class="btn btn-outline-primary" href="/protocols/edit?id=' . $p['id'] . '" title="Bearbeiten">';
+                $html .= '<i class="bi bi-pencil"></i>';
+                $html .= '</a>';
+                $html .= '<a class="btn btn-outline-secondary" href="/protocols/pdf?protocol_id=' . $p['id'] . '" target="_blank" title="PDF ansehen">';
+                $html .= '<i class="bi bi-file-pdf"></i>';
+                $html .= '</a>';
+                $html .= '</div>';
+                $html .= '</td>';
+                $html .= '</tr>';
+            }
+            
+            $html .= '</tbody>';
+            $html .= '</table>';
+            $html .= '</div>';
+            $html .= '</div>';
+        }
+        
+        View::render('Protokolle', $html);
+    }
+
+    /** GET: /protocols/edit?id=... - Protokoll bearbeiten */
+    public function form(): void
+    {
+        Auth::requireAuth();
+        $pdo = Database::pdo();
+        $id = $_GET['id'] ?? '';
+        
+        if (empty($id)) {
+            Flash::add('error', 'Protokoll-ID fehlt.');
+            header('Location: /protocols');
+            exit;
+        }
+        
+        // Protokoll mit JOIN zu Einheit und Objekt laden
+        $sql = "SELECT p.*, u.label as unit_label, u.object_id,
+                       o.city, o.street, o.house_no, o.postal_code
+                FROM protocols p 
+                JOIN units u ON u.id = p.unit_id 
+                JOIN objects o ON o.id = u.object_id 
+                WHERE p.id = ? AND p.deleted_at IS NULL";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$id]);
+        $protocol = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$protocol) {
+            Flash::add('error', 'Protokoll nicht gefunden.');
+            header('Location: /protocols');
+            exit;
+        }
+        
+        // Payload sicher dekodieren
+        $payload = [];
+        if (!empty($protocol['payload'])) {
+            $decoded = json_decode($protocol['payload'], true);
+            if (is_array($decoded)) {
+                $payload = $decoded;
+            }
+        }
+        
+        // Sichere Array-Zugriffe mit Fallbacks
+        $address = $payload['address'] ?? [];
+        $rooms = $payload['rooms'] ?? [];
+        $meters = $payload['meters'] ?? [];
+        $keys = $payload['keys'] ?? [];
+        $meta = $payload['meta'] ?? [];
+        
+        // Einzelne Meta-Bereiche mit Fallbacks
+        $bank = $meta['bank'] ?? [];
+        $tenantContact = $meta['tenant_contact'] ?? [];
+        $tenantNewAddr = $meta['tenant_new_addr'] ?? [];
+        $consents = $meta['consents'] ?? [];
+        
+        // Eigentümer und Hausverwaltung laden
+        $owners = $pdo->query("SELECT id, name FROM owners WHERE deleted_at IS NULL ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+        $managers = $pdo->query("SELECT id, name FROM managers WHERE deleted_at IS NULL ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+        
+        $html = '<div class="page-header">';
+        $html .= '<h1>Protokoll bearbeiten</h1>';
+        $html .= '<nav aria-label="breadcrumb">';
+        $html .= '<ol class="breadcrumb">';
+        $html .= '<li class="breadcrumb-item"><a href="/protocols">Protokolle</a></li>';
+        $html .= '<li class="breadcrumb-item active">Bearbeiten</li>';
+        $html .= '</ol>';
+        $html .= '</nav>';
+        $html .= '</div>';
+        
+        $html .= '<form method="post" action="/protocols/save" enctype="multipart/form-data">';
+        $html .= Csrf::tokenField();
+        $html .= '<input type="hidden" name="id" value="' . htmlspecialchars($id) . '">';
+        
+        // Tabs für verschiedene Bereiche
+        $html .= '<ul class="nav nav-tabs mb-4" role="tablist">';
+        $html .= '<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-basic">Grunddaten</a></li>';
+        $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-rooms">Räume</a></li>';
+        $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-meters">Zähler</a></li>';
+        $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-keys">Schlüssel</a></li>';
+        $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-meta">Details</a></li>';
+        $html .= '</ul>';
+        
+        $html .= '<div class="tab-content">';
+        
+        // === TAB 1: GRUNDDATEN ===
+        $html .= '<div class="tab-pane fade show active" id="tab-basic">';
+        $html .= '<div class="card">';
+        $html .= '<div class="card-header">Grunddaten</div>';
+        $html .= '<div class="card-body">';
+        $html .= '<div class="row g-3">';
+        
+        // Adresse
+        $html .= '<div class="col-md-3">';
+        $html .= '<label class="form-label">Stadt *</label>';
+        $html .= '<input class="form-control" name="address[city]" value="' . htmlspecialchars($address['city'] ?? $protocol['city'] ?? '') . '" required>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-2">';
+        $html .= '<label class="form-label">PLZ</label>';
+        $html .= '<input class="form-control" name="address[postal_code]" value="' . htmlspecialchars($address['postal_code'] ?? $protocol['postal_code'] ?? '') . '">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-4">';
+        $html .= '<label class="form-label">Straße *</label>';
+        $html .= '<input class="form-control" name="address[street]" value="' . htmlspecialchars($address['street'] ?? $protocol['street'] ?? '') . '" required>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-3">';
+        $html .= '<label class="form-label">Hausnummer *</label>';
+        $html .= '<input class="form-control" name="address[house_no]" value="' . htmlspecialchars($address['house_no'] ?? $protocol['house_no'] ?? '') . '" required>';
+        $html .= '</div>';
+        
+        // Wohneinheit
+        $html .= '<div class="col-md-3">';
+        $html .= '<label class="form-label">Wohneinheit *</label>';
+        $html .= '<input class="form-control" name="address[unit_label]" value="' . htmlspecialchars($address['unit_label'] ?? $protocol['unit_label'] ?? '') . '" required>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-2">';
+        $html .= '<label class="form-label">Etage</label>';
+        $html .= '<input class="form-control" name="address[floor]" value="' . htmlspecialchars($address['floor'] ?? '') . '">';
+        $html .= '</div>';
+        
+        // Protokoll-Details
+        $html .= '<div class="col-md-3">';
+        $html .= '<label class="form-label">Typ *</label>';
+        $html .= '<select class="form-select" name="type" required>';
+        $html .= '<option value="einzug"' . (($protocol['type'] ?? '') === 'einzug' ? ' selected' : '') . '>Einzugsprotokoll</option>';
+        $html .= '<option value="auszug"' . (($protocol['type'] ?? '') === 'auszug' ? ' selected' : '') . '>Auszugsprotokoll</option>';
+        $html .= '<option value="zwischenprotokoll"' . (($protocol['type'] ?? '') === 'zwischenprotokoll' ? ' selected' : '') . '>Zwischenprotokoll</option>';
+        $html .= '</select>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-4">';
+        $html .= '<label class="form-label">Mieter *</label>';
+        $html .= '<input class="form-control" name="tenant_name" value="' . htmlspecialchars($protocol['tenant_name'] ?? '') . '" required>';
+        $html .= '</div>';
+        
+        // Eigentümer und Hausverwaltung
+        $html .= '<div class="col-md-6">';
+        $html .= '<label class="form-label">Eigentümer</label>';
+        $html .= '<select class="form-select" name="owner_id">';
+        $html .= '<option value="">-- Bitte wählen --</option>';
+        foreach ($owners as $owner) {
+            $selected = ($protocol['owner_id'] ?? '') === $owner['id'] ? ' selected' : '';
+            $html .= '<option value="' . $owner['id'] . '"' . $selected . '>' . htmlspecialchars($owner['name']) . '</option>';
+        }
+        $html .= '</select>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-6">';
+        $html .= '<label class="form-label">Hausverwaltung</label>';
+        $html .= '<select class="form-select" name="manager_id">';
+        $html .= '<option value="">-- Bitte wählen --</option>';
+        foreach ($managers as $manager) {
+            $selected = ($protocol['manager_id'] ?? '') === $manager['id'] ? ' selected' : '';
+            $html .= '<option value="' . $manager['id'] . '"' . $selected . '>' . htmlspecialchars($manager['name']) . '</option>';
+        }
+        $html .= '</select>';
+        $html .= '</div>';
+        
+        $html .= '</div>'; // row
+        $html .= '</div>'; // card-body
+        $html .= '</div>'; // card
+        $html .= '</div>'; // tab-pane
+        
+        // === TAB 2: RÄUME ===
+        $html .= '<div class="tab-pane fade" id="tab-rooms">';
+        $html .= '<div class="card">';
+        $html .= '<div class="card-header">Räume</div>';
+        $html .= '<div class="card-body">';
+        
+        if (empty($rooms)) {
+            $html .= '<div class="alert alert-info">';
+            $html .= '<i class="bi bi-info-circle me-2"></i>';
+            $html .= 'Noch keine Räume erfasst. Verwenden Sie den Wizard um Räume hinzuzufügen.';
+            $html .= '</div>';
+        } else {
+            $html .= '<div class="row g-3">';
+            $roomIndex = 0;
+            foreach ($rooms as $room) {
+                $html .= '<div class="col-md-6">';
+                $html .= '<div class="card">';
+                $html .= '<div class="card-header">' . htmlspecialchars($room['name'] ?? 'Raum ' . ($roomIndex + 1)) . '</div>';
+                $html .= '<div class="card-body">';
+                $html .= '<input type="hidden" name="rooms[' . $roomIndex . '][name]" value="' . htmlspecialchars($room['name'] ?? '') . '">';
+                $html .= '<div class="mb-2">';
+                $html .= '<label class="form-label">Zustand</label>';
+                $html .= '<textarea class="form-control" name="rooms[' . $roomIndex . '][state]" rows="2">' . htmlspecialchars($room['state'] ?? '') . '</textarea>';
+                $html .= '</div>';
+                $html .= '<div class="mb-2">';
+                $html .= '<label class="form-label">Geruch</label>';
+                $html .= '<input class="form-control" name="rooms[' . $roomIndex . '][smell]" value="' . htmlspecialchars($room['smell'] ?? '') . '">';
+                $html .= '</div>';
+                $html .= '<div class="form-check">';
+                $html .= '<input class="form-check-input" type="checkbox" name="rooms[' . $roomIndex . '][accepted]"' . (!empty($room['accepted']) ? ' checked' : '') . '>';
+                $html .= '<label class="form-check-label">Abgenommen</label>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $roomIndex++;
+            }
+            $html .= '</div>';
+        }
+        
+        $html .= '</div>'; // card-body
+        $html .= '</div>'; // card
+        $html .= '</div>'; // tab-pane
+        
+        // === TAB 3: ZÄHLER ===
+        $html .= '<div class="tab-pane fade" id="tab-meters">';
+        $html .= '<div class="card">';
+        $html .= '<div class="card-header">Zählerstände</div>';
+        $html .= '<div class="card-body">';
+        
+        $meterTypes = [
+            'strom_wohnung' => 'Strom Wohnung',
+            'strom_haus' => 'Strom Haus (Allgemein)',
+            'gas_wohnung' => 'Gas Wohnung',
+            'gas_haus' => 'Gas Haus (Allgemein)',
+            'kaltwasser_kueche' => 'Kaltwasser Küche',
+            'warmwasser_kueche' => 'Warmwasser Küche',
+            'kaltwasser_bad' => 'Kaltwasser Bad',
+            'warmwasser_bad' => 'Warmwasser Bad',
+            'wasser_waschmaschine' => 'Wasser Waschmaschine',
+        ];
+        
+        $html .= '<div class="row g-3">';
+        foreach ($meterTypes as $key => $label) {
+            $meter = $meters[$key] ?? [];
+            $html .= '<div class="col-md-6">';
+            $html .= '<div class="card">';
+            $html .= '<div class="card-header">' . $label . '</div>';
+            $html .= '<div class="card-body">';
+            $html .= '<div class="row g-2">';
+            $html .= '<div class="col-6">';
+            $html .= '<label class="form-label">Zählernummer</label>';
+            $html .= '<input class="form-control" name="meters[' . $key . '][number]" value="' . htmlspecialchars($meter['number'] ?? '') . '">';
+            $html .= '</div>';
+            $html .= '<div class="col-6">';
+            $html .= '<label class="form-label">Zählerstand</label>';
+            $html .= '<input class="form-control" name="meters[' . $key . '][value]" value="' . htmlspecialchars($meter['value'] ?? '') . '">';
+            $html .= '</div>';
+            $html .= '</div>';
+            $html .= '</div>';
+            $html .= '</div>';
+            $html .= '</div>';
+        }
+        $html .= '</div>';
+        
+        $html .= '</div>'; // card-body
+        $html .= '</div>'; // card
+        $html .= '</div>'; // tab-pane
+        
+        // === TAB 4: SCHLÜSSEL ===
+        $html .= '<div class="tab-pane fade" id="tab-keys">';
+        $html .= '<div class="card">';
+        $html .= '<div class="card-header">Schlüssel</div>';
+        $html .= '<div class="card-body">';
+        
+        if (empty($keys)) {
+            $html .= '<div class="alert alert-info">';
+            $html .= '<i class="bi bi-info-circle me-2"></i>';
+            $html .= 'Noch keine Schlüssel erfasst.';
+            $html .= '</div>';
+        } else {
+            $html .= '<div class="row g-3">';
+            $keyIndex = 0;
+            foreach ($keys as $key) {
+                $html .= '<div class="col-md-4">';
+                $html .= '<div class="card">';
+                $html .= '<div class="card-body">';
+                $html .= '<div class="mb-2">';
+                $html .= '<label class="form-label">Bezeichnung</label>';
+                $html .= '<input class="form-control" name="keys[' . $keyIndex . '][label]" value="' . htmlspecialchars($key['label'] ?? '') . '">';
+                $html .= '</div>';
+                $html .= '<div class="row g-2">';
+                $html .= '<div class="col-6">';
+                $html .= '<label class="form-label">Anzahl</label>';
+                $html .= '<input class="form-control" type="number" name="keys[' . $keyIndex . '][qty]" value="' . htmlspecialchars($key['qty'] ?? '') . '">';
+                $html .= '</div>';
+                $html .= '<div class="col-6">';
+                $html .= '<label class="form-label">Schlüssel-Nr.</label>';
+                $html .= '<input class="form-control" name="keys[' . $keyIndex . '][no]" value="' . htmlspecialchars($key['no'] ?? '') . '">';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $keyIndex++;
+            }
+            $html .= '</div>';
+        }
+        
+        $html .= '</div>'; // card-body
+        $html .= '</div>'; // card
+        $html .= '</div>'; // tab-pane
+        
+        // === TAB 5: DETAILS ===
+        $html .= '<div class="tab-pane fade" id="tab-meta">';
+        $html .= '<div class="card">';
+        $html .= '<div class="card-header">Weitere Details</div>';
+        $html .= '<div class="card-body">';
+        $html .= '<div class="row g-3">';
+        
+        // Bankdaten (für Auszug)
+        $html .= '<div class="col-12">';
+        $html .= '<h6>Bankdaten für Kautionsrückzahlung</h6>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-4">';
+        $html .= '<label class="form-label">Bank</label>';
+        $html .= '<input class="form-control" name="meta[bank][bank]" value="' . htmlspecialchars($bank['bank'] ?? '') . '">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-4">';
+        $html .= '<label class="form-label">IBAN</label>';
+        $html .= '<input class="form-control" name="meta[bank][iban]" value="' . htmlspecialchars($bank['iban'] ?? '') . '">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-4">';
+        $html .= '<label class="form-label">Kontoinhaber</label>';
+        $html .= '<input class="form-control" name="meta[bank][holder]" value="' . htmlspecialchars($bank['holder'] ?? '') . '">';
+        $html .= '</div>';
+        
+        // Kontaktdaten
+        $html .= '<div class="col-12"><hr></div>';
+        $html .= '<div class="col-12"><h6>Kontaktdaten Mieter</h6></div>';
+        
+        $html .= '<div class="col-md-6">';
+        $html .= '<label class="form-label">E-Mail</label>';
+        $html .= '<input type="email" class="form-control" name="meta[tenant_contact][email]" value="' . htmlspecialchars($tenantContact['email'] ?? '') . '">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-6">';
+        $html .= '<label class="form-label">Telefon</label>';
+        $html .= '<input class="form-control" name="meta[tenant_contact][phone]" value="' . htmlspecialchars($tenantContact['phone'] ?? '') . '">';
+        $html .= '</div>';
+        
+        // Neue Meldeadresse
+        $html .= '<div class="col-12"><hr></div>';
+        $html .= '<div class="col-12"><h6>Neue Meldeadresse</h6></div>';
+        
+        $html .= '<div class="col-md-8">';
+        $html .= '<label class="form-label">Straße & Hausnummer</label>';
+        $html .= '<input class="form-control" name="meta[tenant_new_addr][street]" value="' . htmlspecialchars($tenantNewAddr['street'] ?? '') . '">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-2">';
+        $html .= '<label class="form-label">PLZ</label>';
+        $html .= '<input class="form-control" name="meta[tenant_new_addr][postal_code]" value="' . htmlspecialchars($tenantNewAddr['postal_code'] ?? '') . '">';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-2">';
+        $html .= '<label class="form-label">Ort</label>';
+        $html .= '<input class="form-control" name="meta[tenant_new_addr][city]" value="' . htmlspecialchars($tenantNewAddr['city'] ?? '') . '">';
+        $html .= '</div>';
+        
+        // Einwilligungen
+        $html .= '<div class="col-12"><hr></div>';
+        $html .= '<div class="col-12"><h6>Einwilligungen</h6></div>';
+        
+        $html .= '<div class="col-md-4">';
+        $html .= '<div class="form-check">';
+        $html .= '<input class="form-check-input" type="checkbox" name="meta[consents][marketing]"' . (!empty($consents['marketing']) ? ' checked' : '') . '>';
+        $html .= '<label class="form-check-label">E‑Mail‑Marketing</label>';
+        $html .= '</div>';
+        $html .= '</div>';
+        
+        $html .= '<div class="col-md-4">';
+        $html .= '<div class="form-check">';
+        $html .= '<input class="form-check-input" type="checkbox" name="meta[consents][disposal]"' . (!empty($consents['disposal']) ? ' checked' : '') . '>';
+        $html .= '<label class="form-check-label">Entsorgung zurückgelassener Gegenstände</label>';
+        $html .= '</div>';
+        $html .= '</div>';
+        
+        // Bemerkungen
+        $html .= '<div class="col-12"><hr></div>';
+        $html .= '<div class="col-12">';
+        $html .= '<label class="form-label">Bemerkungen / Sonstiges</label>';
+        $html .= '<textarea class="form-control" name="meta[notes]" rows="4">' . htmlspecialchars($meta['notes'] ?? '') . '</textarea>';
+        $html .= '</div>';
+        
+        $html .= '</div>'; // row
+        $html .= '</div>'; // card-body
+        $html .= '</div>'; // card
+        $html .= '</div>'; // tab-pane
+        
+        $html .= '</div>'; // tab-content
+        
+        // Submit-Buttons
+        $html .= '<div class="mt-4 d-flex justify-content-between">';
+        $html .= '<a class="btn btn-outline-secondary" href="/protocols">';
+        $html .= '<i class="bi bi-arrow-left me-2"></i>Zurück zur Übersicht';
+        $html .= '</a>';
+        $html .= '<div class="btn-group">';
+        $html .= '<button type="submit" class="btn btn-primary">';
+        $html .= '<i class="bi bi-floppy me-2"></i>Speichern';
+        $html .= '</button>';
+        $html .= '<a class="btn btn-outline-secondary" href="/protocols/pdf?protocol_id=' . $id . '" target="_blank">';
+        $html .= '<i class="bi bi-file-pdf me-2"></i>PDF ansehen';
+        $html .= '</a>';
+        $html .= '</div>';
+        $html .= '</div>';
+        
+        $html .= '</form>';
+        
+        View::render('Protokoll bearbeiten', $html);
+    }
+
+    // Placeholder-Methoden (damit Routing nicht bricht)
+    public function save(): void 
+    { 
+        Auth::requireAuth(); 
+        Flash::add('info','Speichern-Funktion wird implementiert.'); 
+        header('Location:/protocols'); 
+    }
+    
+    public function delete(): void 
+    { 
+        Auth::requireAuth(); 
+        Flash::add('info','Löschen-Funktion wird implementiert.'); 
+        header('Location:/protocols'); 
+    }
+    
+    public function export(): void 
+    { 
+        Auth::requireAuth(); 
+        Flash::add('info','Export-Funktion wird implementiert.'); 
+        header('Location:/protocols'); 
+    }
+
+    /** PDF anzeigen */
+    public function pdf(): void
+    {
+        Auth::requireAuth();
+        $protocolId = (string)($_GET['protocol_id'] ?? '');
+        $version = (string)($_GET['version'] ?? 'latest');
+        
+        if ($protocolId === '') { 
+            http_response_code(400); 
+            echo 'protocol_id fehlt'; 
+            return; 
+        }
+        
+        // Für jetzt: Placeholder PDF
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="protokoll.pdf"');
+        echo "%PDF-1.4\n1 0 obj <<>> endobj\ntrailer <<>>\n%%EOF";
+    }
+
+    /** PDF per Mail versenden */
+    public function send(): void
+    {
+        Auth::requireAuth();
+        $protocolId = (string)($_GET['protocol_id'] ?? '');
+        $to = (string)($_GET['to'] ?? 'owner');
+        
+        if ($protocolId === '') { 
+            http_response_code(400); 
+            header('Content-Type:application/json'); 
+            echo json_encode(['error'=>'protocol_id fehlt']); 
+            return; 
+        }
+        
+        // Für jetzt: Placeholder
+        Flash::add('info', 'E-Mail-Versand wird implementiert.');
+        header('Location: /protocols/edit?id=' . $protocolId);
+    }
+}

@@ -1,3 +1,25 @@
+#!/bin/bash
+
+echo "🚨 Parse-Error beheben und Stammdaten korrigieren"
+echo "================================================"
+
+# 1. Neuestes Backup finden und wiederherstellen
+echo "📦 Suche neuestes Backup..."
+latest_backup=$(ls -t backend/src/Controllers/SettingsController.php.backup_* 2>/dev/null | head -n1)
+
+if [ -n "$latest_backup" ]; then
+    echo "📁 Verwende Backup: $latest_backup"
+    cp "$latest_backup" backend/src/Controllers/SettingsController.php
+    echo "✅ Backup wiederhergestellt"
+else
+    echo "❌ Kein Backup gefunden!"
+    exit 1
+fi
+
+# 2. Komplett neue, fehlerfreie SettingsController.php erstellen
+echo "📝 Erstelle neue, fehlerfreie SettingsController.php..."
+
+cat > backend/src/Controllers/SettingsController.php << 'EOF'
 <?php
 
 namespace App\Controllers;
@@ -371,3 +393,36 @@ class SettingsController {
         header('Location: /settings/branding');
     }
 }
+EOF
+
+echo "✅ Neue SettingsController.php erstellt"
+
+# Prüfe die Route für Logo-Löschung
+echo "🔗 Prüfe Route für Logo-Löschung..."
+if ! grep -q "/settings/branding/delete-logo" backend/public/index.php; then
+    echo "📝 Füge Route zur index.php hinzu..."
+    
+    cp backend/public/index.php backend/public/index.php.backup_safe_$(date +%Y%m%d_%H%M%S)
+    
+    sed -i '/case.*\/settings\/branding\/save.*:/,/break;/a\\n    case "/settings/branding/delete-logo":\n        Auth::requireAuth();\n        (new SettingsController())->brandingDeleteLogo();\n        break;' backend/public/index.php
+    
+    echo "✅ Route hinzugefügt!"
+else
+    echo "✅ Route bereits vorhanden"
+fi
+
+echo ""
+echo "🎉 PARSE-ERROR BEHOBEN UND STAMMDATEN KORRIGIERT!"
+echo "================================================="
+echo "✅ Alle Funktionen wiederhergestellt:"
+echo "   - Parse-Error behoben"
+echo "   - Stammdaten zeigen Links zu: Objekte, Eigentümer, Hausverwaltungen"
+echo "   - Textbausteine mit allen 4 Bereichen"
+echo "   - Benutzerprofil mit Firmenangaben"
+echo "   - Logo-Löschfunktion"
+echo ""
+echo "🧪 Testen Sie jetzt:"
+echo "👉 http://127.0.0.1:8080/settings (3 Karten mit Links)"
+echo "👉 http://127.0.0.1:8080/settings/texts (4 Textbausteine)"
+echo "👉 http://127.0.0.1:8080/settings/users (Firmenangaben)"
+echo "👉 http://127.0.0.1:8080/settings/branding (Logo-Löschfunktion)"

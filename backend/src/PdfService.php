@@ -130,11 +130,43 @@ if (isset($pdf)) {
 </body></html>
 <?php
         $html = ob_get_clean();
-        $dompdf = new Dompdf(); $dompdf->loadHtml($html,'UTF-8'); $dompdf->setPaper('A4','portrait'); $dompdf->render();
-        $base = realpath(__DIR__.'/../storage/pdfs') ?: (__DIR__.'/../storage/pdfs'); if(!is_dir($base)) @mkdir($base,0775,true);
-        $dir=$base.'/'.$protocolId; if(!is_dir($dir)) @mkdir($dir,0775,true);
-        $path=$dir.'/v'.$versionNo.'.pdf'; file_put_contents($path,$dompdf->output());
+        $dompdf = new Dompdf(); 
+        $dompdf->loadHtml($html,'UTF-8'); 
+        $dompdf->setPaper('A4','portrait'); 
+        $dompdf->render();
+        
+        // Verzeichnisse erstellen mit besserer Fehlerbehandlung
+        $base = realpath(__DIR__.'/../storage/pdfs') ?: (__DIR__.'/../storage/pdfs'); 
+        if(!is_dir($base)) {
+            if (!@mkdir($base,0775,true)) {
+                throw new \RuntimeException('Konnte PDF-Basis-Verzeichnis nicht erstellen: '.$base);
+            }
+        }
+        
+        $dir=$base.'/'.$protocolId; 
+        if(!is_dir($dir)) {
+            if (!@mkdir($dir,0775,true)) {
+                throw new \RuntimeException('Konnte Protokoll-Verzeichnis nicht erstellen: '.$dir);
+            }
+        }
+        
+        $path=$dir.'/v'.$versionNo.'.pdf'; 
+        $pdfContent = $dompdf->output();
+        
+        if (empty($pdfContent)) {
+            throw new \RuntimeException('PDF-Inhalt ist leer');
+        }
+        
+        if (file_put_contents($path, $pdfContent) === false) {
+            throw new \RuntimeException('Konnte PDF-Datei nicht schreiben: '.$path);
+        }
+        
+        // Datei-Berechtigungen setzen
+        @chmod($path, 0664);
+        
+        // PDF-Pfad in Datenbank speichern
         $pdo->prepare("UPDATE protocol_versions SET pdf_path=? WHERE protocol_id=? AND version_no=?")->execute([$path,$protocolId,$versionNo]);
+        
         return $path;
     }
 

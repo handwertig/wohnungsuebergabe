@@ -68,9 +68,13 @@ switch ($path) {
         break;
 
     case '/protocols/new':
-    case '/protocols/edit':
         Auth::requireAuth();
         (new ProtocolsController())->form();
+        break;
+
+    case '/protocols/edit':
+        Auth::requireAuth();
+        (new ProtocolsController())->edit();
         break;
 
     case '/protocols/save':

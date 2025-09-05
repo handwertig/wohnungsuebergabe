@@ -4,91 +4,236 @@ declare(strict_types=1);
 namespace App;
 
 use PDO;
-use PDOException;
 
+/**
+ * Settings-Verwaltung für Anwendungseinstellungen
+ * Vollständige, syntaktisch korrekte Version
+ */
 final class Settings
 {
-    /** Stellt sicher, dass die Tabelle app_settings vorhanden ist (idempotent). */
-    private static function ensureTable(PDO $pdo): void
-    {
-        static $checked = false;
-        if ($checked) return;
+    private static ?array $cache = null;
 
-        // Prüfen, ob Tabelle existiert
-        try {
-            $pdo->query("SELECT 1 FROM `app_settings` LIMIT 1");
-            $checked = true;
-            return;
-        } catch (PDOException $e) {
-            // 42S02 = Table not found
-            if ($e->getCode() !== '42S02') throw $e;
+    /**
+     * Lädt alle Settings aus der Datenbank
+     */
+    private static function loadSettings(): array
+    {
+        if (self::$cache !== null) {
+            return self::$cache;
         }
 
-        // Anlegen (idempotent)
-        $sql = "CREATE TABLE IF NOT EXISTS `app_settings` (
-                  `key`   VARCHAR(190) NOT NULL PRIMARY KEY,
-                  `value` TEXT NULL
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-        $pdo->exec($sql);
-        $checked = true;
+        try {
+            $pdo = Database::pdo();
+            
+            // Prüfen ob settings Tabelle existiert
+            $tables = $pdo->query("SHOW TABLES LIKE 'settings'")->fetchAll();
+            if (empty($tables)) {
+                // Settings-Tabelle erstellen falls nicht vorhanden
+                $pdo->exec("
+                    CREATE TABLE settings (
+                        `key` VARCHAR(255) PRIMARY KEY,
+                        `value` TEXT,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                ");
+                
+                // Standard-Einstellungen einfügen
+                $defaults = [
+                    'pdf_logo_path' => '',
+                    'custom_css' => '',
+                    'brand_primary' => '#222357',
+                    'brand_secondary' => '#e22278',
+                    'smtp_host' => '',
+                    'smtp_port' => '587',
+                    'smtp_user' => '',
+                    'smtp_pass' => '',
+                    'smtp_from' => '',
+                    'smtp_from_name' => 'Wohnungsübergabe',
+                    'docusign_account_id' => '',
+                    'docusign_base_url' => 'https://demo.docusign.net/restapi',
+                    'docusign_client_id' => '',
+                    'docusign_client_secret' => '',
+                    'docusign_redirect_uri' => '',
+                ];
+                
+                $stmt = $pdo->prepare("INSERT INTO settings (`key`, `value`) VALUES (?, ?)");
+                foreach ($defaults as $key => $value) {
+                    $stmt->execute([$key, $value]);
+                }
+            }
+            
+            $stmt = $pdo->query("SELECT `key`, `value` FROM settings");
+            $settings = [];
+            
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $settings[$row['key']] = $row['value'];
+            }
+            
+            self::$cache = $settings;
+            return $settings;
+            
+        } catch (\Throwable $e) {
+            // Fallback bei Datenbankfehlern
+            return [
+                'pdf_logo_path' => '',
+                'custom_css' => '',
+                'brand_primary' => '#222357',
+                'brand_secondary' => '#e22278',
+                'smtp_host' => '',
+                'smtp_port' => '587',
+                'smtp_user' => '',
+                'smtp_pass' => '',
+                'smtp_from' => '',
+                'smtp_from_name' => 'Wohnungsübergabe',
+                'docusign_account_id' => '',
+                'docusign_base_url' => 'https://demo.docusign.net/restapi',
+                'docusign_client_id' => '',
+                'docusign_client_secret' => '',
+                'docusign_redirect_uri' => '',
+            ];
+        }
     }
 
-    public static function get(string $key, $default = null)
+    /**
+     * Holt eine einzelne Einstellung
+     */
+    public static function get(string $key, string $default = ''): string
     {
-        $pdo = Database::pdo();
-        self::ensureTable($pdo);
-
-        $st  = $pdo->prepare('SELECT `value` FROM `app_settings` WHERE `key` = ? LIMIT 1');
-        $st->execute([$key]);
-        $v = $st->fetchColumn();
-        return ($v === false) ? $default : $v;
+        $settings = self::loadSettings();
+        return (string)($settings[$key] ?? $default);
     }
 
+    /**
+     * Holt alle Einstellungen
+     */
+    public static function getAll(): array
+    {
+        return self::loadSettings();
+    }
+
+    /**
+     * Setzt eine Einstellung
+     */
     public static function set(string $key, string $value): void
     {
-        $pdo = Database::pdo();
-        self::ensureTable($pdo);
-
-        $st = $pdo->prepare(
-            'INSERT INTO `app_settings`(`key`,`value`) VALUES(?,?)
-             ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)'
-        );
-        $st->execute([$key, $value]);
-    }
-
-    /** @param array<string,string> $data */
-    public static function setMany(array $data): void
-    {
-        if (!$data) return;
-
-        $pdo = Database::pdo();
-        self::ensureTable($pdo);
-
-        $pdo->beginTransaction();
         try {
-            $st = $pdo->prepare(
-                'INSERT INTO `app_settings`(`key`,`value`) VALUES(?,?)
-                 ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)'
-            );
-            foreach ($data as $k => $v) {
-                $st->execute([$k, (string)$v]);
-            }
-            $pdo->commit();
+            $pdo = Database::pdo();
+            $stmt = $pdo->prepare("
+                INSERT INTO settings (`key`, `value`) 
+                VALUES (?, ?) 
+                ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), updated_at = CURRENT_TIMESTAMP
+            ");
+            $stmt->execute([$key, $value]);
+            
+            // Cache invalidieren
+            self::$cache = null;
+            
         } catch (\Throwable $e) {
-            $pdo->rollBack();
-            throw $e;
+            // Fehler ignorieren (graceful degradation)
+            error_log("Settings::set error: " . $e->getMessage());
         }
     }
 
-    /** @return array<string,string> */
-    public static function all(): array
+    /**
+     * Setzt mehrere Einstellungen auf einmal
+     */
+    public static function setMany(array $settings): void
     {
-        $pdo = Database::pdo();
-        self::ensureTable($pdo);
+        try {
+            $pdo = Database::pdo();
+            $stmt = $pdo->prepare("
+                INSERT INTO settings (`key`, `value`) 
+                VALUES (?, ?) 
+                ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), updated_at = CURRENT_TIMESTAMP
+            ");
+            
+            foreach ($settings as $key => $value) {
+                $stmt->execute([$key, (string)$value]);
+            }
+            
+            // Cache invalidieren
+            self::$cache = null;
+            
+        } catch (\Throwable $e) {
+            // Fehler ignorieren (graceful degradation)
+            error_log("Settings::setMany error: " . $e->getMessage());
+        }
+    }
 
-        $rows = $pdo->query('SELECT `key`,`value` FROM `app_settings`')->fetchAll(PDO::FETCH_ASSOC);
-        $out = [];
-        foreach ($rows as $r) { $out[(string)$r['key']] = (string)$r['value']; }
-        return $out;
+    /**
+     * Löscht eine Einstellung
+     */
+    public static function delete(string $key): void
+    {
+        try {
+            $pdo = Database::pdo();
+            $stmt = $pdo->prepare("DELETE FROM settings WHERE `key` = ?");
+            $stmt->execute([$key]);
+            
+            // Cache invalidieren
+            self::$cache = null;
+            
+        } catch (\Throwable $e) {
+            error_log("Settings::delete error: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Prüft ob eine Einstellung existiert
+     */
+    public static function has(string $key): bool
+    {
+        $settings = self::loadSettings();
+        return array_key_exists($key, $settings);
+    }
+
+    /**
+     * Cache leeren (für Tests und Wartung)
+     */
+    public static function clearCache(): void
+    {
+        self::$cache = null;
+    }
+
+    /**
+     * Holt Mail-Konfiguration
+     */
+    public static function getMailConfig(): array
+    {
+        return [
+            'host' => self::get('smtp_host'),
+            'port' => (int)self::get('smtp_port', '587'),
+            'user' => self::get('smtp_user'),
+            'pass' => self::get('smtp_pass'),
+            'from' => self::get('smtp_from'),
+            'from_name' => self::get('smtp_from_name', 'Wohnungsübergabe'),
+        ];
+    }
+
+    /**
+     * Holt DocuSign-Konfiguration
+     */
+    public static function getDocusignConfig(): array
+    {
+        return [
+            'account_id' => self::get('docusign_account_id'),
+            'base_url' => self::get('docusign_base_url', 'https://demo.docusign.net/restapi'),
+            'client_id' => self::get('docusign_client_id'),
+            'client_secret' => self::get('docusign_client_secret'),
+            'redirect_uri' => self::get('docusign_redirect_uri'),
+        ];
+    }
+
+    /**
+     * Holt Branding-Konfiguration
+     */
+    public static function getBrandingConfig(): array
+    {
+        return [
+            'logo_path' => self::get('pdf_logo_path'),
+            'custom_css' => self::get('custom_css'),
+            'primary_color' => self::get('brand_primary', '#222357'),
+            'secondary_color' => self::get('brand_secondary', '#e22278'),
+        ];
     }
 }

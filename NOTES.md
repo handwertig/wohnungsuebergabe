@@ -35,6 +35,13 @@ Dieses Dokument dient als Übersicht für Entwickler, Architekturentscheidungen 
 
 ---
 
+## Fixes (v0.7.2) - 05.09.2025
+
+- **PDF-Anzeige repariert**: Controller `pdf()` Methode vollständig implementiert mit PdfService-Integration
+- **Historie im Editor wiederhergestellt**: `/protocols/edit` zeigt jetzt Events und E-Mail-Versandlog unter dem Formular
+- **Mail-Versand funktioniert**: `send()` Methode mit PHPMailer, SMTP-Settings und Logging in `email_log` + `protocol_events`
+- **Routing korrigiert**: `/protocols/edit` zeigt jetzt die richtige `edit()` Methode mit Historie-Anzeige
+
 ## Offene ToDos / Backlog
 
 1. **PDF-Hardening**

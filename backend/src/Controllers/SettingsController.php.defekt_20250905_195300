@@ -5,8 +5,6 @@ namespace App\Controllers;
 use App\Auth;
 use App\Settings;
 use App\View;
-use App\Database;
-use PDO;
 
 class SettingsController {
     
@@ -33,50 +31,37 @@ class SettingsController {
         return $html;
     }
 
-    /* ---------- Stammdaten (Links zu Objekten, Eigentümer, Hausverwaltungen) ---------- */
     public function general(): void {
         Auth::requireAuth();
-        
+        $companyName = Settings::get('company_name', '');
+        $companyAddress = Settings::get('company_address', '');
+        $companyPhone = Settings::get('company_phone', '');
+        $companyEmail = Settings::get('company_email', '');
+
         $body = $this->tabs('general');
         $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Stammdaten</h1>';
-        $body .= '<p class="text-muted">Hier finden Sie die Verwaltung aller Stammdaten Ihrer Immobilien und Kontakte.</p>';
-        $body .= '</div></div>';
-        
-        $body .= '<div class="row g-3 mt-3">';
-        
-        // Objekte
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-primary">Objekte</div>';
-        $body .= '<p class="text-muted small mb-2">Immobilienobjekte und Wohneinheiten verwalten.</p>';
-        $body .= '<a class="btn btn-outline-primary" href="/objects">Objekte öffnen</a>';
-        $body .= '</div></div></div>';
-        
-        // Eigentümer
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-success">Eigentümer</div>';
-        $body .= '<p class="text-muted small mb-2">Eigentümer anlegen und bearbeiten.</p>';
-        $body .= '<a class="btn btn-outline-success" href="/owners">Eigentümer öffnen</a>';
-        $body .= '</div></div></div>';
-        
-        // Hausverwaltungen
-        $body .= '<div class="col-md-4"><div class="card"><div class="card-body">';
-        $body .= '<div class="h6 text-warning">Hausverwaltungen</div>';
-        $body .= '<p class="text-muted small mb-2">Hausverwaltungen anlegen und bearbeiten.</p>';
-        $body .= '<a class="btn btn-outline-warning" href="/managers">Hausverwaltungen öffnen</a>';
-        $body .= '</div></div></div>';
-        
-        $body .= '</div>';
-        
+        $body .= '<form method="post" action="/settings/general/save" class="row g-3">';
+        $body .= '<div class="col-md-6"><label class="form-label">Firmenname</label><input class="form-control" name="company_name" value="'.$this->esc($companyName).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">Telefon</label><input class="form-control" name="company_phone" value="'.$this->esc($companyPhone).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">E-Mail</label><input class="form-control" type="email" name="company_email" value="'.$this->esc($companyEmail).'"></div>';
+        $body .= '<div class="col-12"><label class="form-label">Adresse</label><textarea class="form-control" name="company_address" rows="3">'.$this->esc($companyAddress).'</textarea></div>';
+        $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
+        $body .= '</form></div></div>';
         View::render('Einstellungen – Stammdaten', $body);
     }
 
     public function generalSave(): void {
         Auth::requireAuth();
-        \App\Flash::add('info', 'Stammdaten werden über die jeweiligen Bereiche verwaltet.');
+        Settings::setMany([
+            'company_name' => (string)(isset($_POST['company_name']) ? $_POST['company_name'] : ''),
+            'company_address' => (string)(isset($_POST['company_address']) ? $_POST['company_address'] : ''),
+            'company_phone' => (string)(isset($_POST['company_phone']) ? $_POST['company_phone'] : ''),
+            'company_email' => (string)(isset($_POST['company_email']) ? $_POST['company_email'] : '')
+        ]);
+        \App\Flash::add('success', 'Stammdaten gespeichert.');
         header('Location: /settings');
     }
 
-    /* ---------- Mail-Einstellungen ---------- */
     public function mail(): void {
         Auth::requireAuth();
         $smtpHost = Settings::get('smtp_host', '');
@@ -114,21 +99,20 @@ class SettingsController {
         header('Location: /settings/mail');
     }
 
-    /* ---------- DocuSign-Einstellungen ---------- */
     public function docusign(): void {
         Auth::requireAuth();
-        $baseUri = Settings::get('ds_base_uri', '');
-        $userId = Settings::get('ds_user_id', '');
-        $clientId = Settings::get('ds_client_id', '');
-        $clientSecret = Settings::get('ds_client_secret', '');
+        $clientId = Settings::get('docusign_client_id', '');
+        $clientSecret = Settings::get('docusign_client_secret', '');
+        $accountId = Settings::get('docusign_account_id', '');
+        $isSandbox = Settings::get('docusign_sandbox', '1') === '1';
 
         $body = $this->tabs('docusign');
         $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">DocuSign-Integration</h1>';
         $body .= '<form method="post" action="/settings/docusign/save" class="row g-3">';
-        $body .= '<div class="col-md-6"><label class="form-label">Base URI</label><input class="form-control" name="ds_base_uri" value="'.$this->esc($baseUri).'"></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">User ID</label><input class="form-control" name="ds_user_id" value="'.$this->esc($userId).'"></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">Client ID</label><input class="form-control" name="ds_client_id" value="'.$this->esc($clientId).'"></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">Client Secret</label><input class="form-control" type="password" name="ds_client_secret" value="'.$this->esc($clientSecret).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">Client ID</label><input class="form-control" name="docusign_client_id" value="'.$this->esc($clientId).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">Client Secret</label><input class="form-control" type="password" name="docusign_client_secret" value="'.$this->esc($clientSecret).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">Account ID</label><input class="form-control" name="docusign_account_id" value="'.$this->esc($accountId).'"></div>';
+        $body .= '<div class="col-md-6"><div class="form-check mt-4"><input class="form-check-input" type="checkbox" name="docusign_sandbox" value="1"'.($isSandbox ? ' checked' : '').'><label class="form-check-label">Sandbox-Modus</label></div></div>';
         $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
         $body .= '</form></div></div>';
         View::render('Einstellungen – DocuSign', $body);
@@ -137,101 +121,40 @@ class SettingsController {
     public function docusignSave(): void {
         Auth::requireAuth();
         Settings::setMany([
-            'ds_base_uri' => (string)(isset($_POST['ds_base_uri']) ? $_POST['ds_base_uri'] : ''),
-            'ds_user_id' => (string)(isset($_POST['ds_user_id']) ? $_POST['ds_user_id'] : ''),
-            'ds_client_id' => (string)(isset($_POST['ds_client_id']) ? $_POST['ds_client_id'] : ''),
-            'ds_client_secret' => (string)(isset($_POST['ds_client_secret']) ? $_POST['ds_client_secret'] : ''),
+            'docusign_client_id' => (string)(isset($_POST['docusign_client_id']) ? $_POST['docusign_client_id'] : ''),
+            'docusign_client_secret' => (string)(isset($_POST['docusign_client_secret']) ? $_POST['docusign_client_secret'] : ''),
+            'docusign_account_id' => (string)(isset($_POST['docusign_account_id']) ? $_POST['docusign_account_id'] : ''),
+            'docusign_sandbox' => isset($_POST['docusign_sandbox']) ? '1' : '0'
         ]);
         \App\Flash::add('success', 'DocuSign-Einstellungen gespeichert.');
         header('Location: /settings/docusign');
     }
 
-    /* ---------- Textbausteine (legal_texts versioniert) ---------- */
     public function texts(): void {
         Auth::requireAuth();
-        $pdo = Database::pdo();
-        $getLatest = function(string $name) use ($pdo) {
-            $st = $pdo->prepare('SELECT title, content, version FROM legal_texts WHERE name=? ORDER BY version DESC LIMIT 1');
-            $st->execute(array($name));
-            $row = $st->fetch(PDO::FETCH_ASSOC);
-            return $row ? $row : array('title'=>'','content'=>'','version'=>0);
-        };
-        
-        $datenschutz = $getLatest('datenschutz');
-        $entsorgung = $getLatest('entsorgung');
-        $marketing = $getLatest('marketing');
-        $kaution = $getLatest('kaution_hinweis');
-
         $body = $this->tabs('texts');
-        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Textbausteine (versioniert)</h1>';
-        $body .= '<form method="post" action="/settings/texts/save" class="row g-4">';
-        
-        $body .= '<div class="col-12"><h2 class="h6">Datenschutz (v'.$this->esc((string)$datenschutz['version']).')</h2>';
-        $body .= '<label class="form-label">Titel</label><input class="form-control" name="ds_title" value="'.$this->esc((string)$datenschutz['title']).'">';
-        $body .= '<label class="form-label mt-2">Inhalt</label><textarea class="form-control" rows="6" name="ds_content">'.$this->esc((string)$datenschutz['content']).'</textarea></div>';
-        
-        $body .= '<div class="col-12"><h2 class="h6">Entsorgung (v'.$this->esc((string)$entsorgung['version']).')</h2>';
-        $body .= '<label class="form-label">Titel</label><input class="form-control" name="en_title" value="'.$this->esc((string)$entsorgung['title']).'">';
-        $body .= '<label class="form-label mt-2">Inhalt</label><textarea class="form-control" rows="6" name="en_content">'.$this->esc((string)$entsorgung['content']).'</textarea></div>';
-        
-        $body .= '<div class="col-12"><h2 class="h6">Marketing (v'.$this->esc((string)$marketing['version']).')</h2>';
-        $body .= '<label class="form-label">Titel</label><input class="form-control" name="mk_title" value="'.$this->esc((string)$marketing['title']).'">';
-        $body .= '<label class="form-label mt-2">Inhalt</label><textarea class="form-control" rows="6" name="mk_content">'.$this->esc((string)$marketing['content']).'</textarea></div>';
-        
-        $body .= '<div class="col-12"><h2 class="h6">Hinweis zur Kautionsrückzahlung (v'.$this->esc((string)$kaution['version']).')</h2>';
-        $body .= '<label class="form-label">Titel</label><input class="form-control" name="ka_title" value="'.$this->esc((string)$kaution['title']).'">';
-        $body .= '<label class="form-label mt-2">Inhalt</label><textarea class="form-control" rows="6" name="ka_content">'.$this->esc((string)$kaution['content']).'</textarea></div>';
-        
-        $body .= '<div class="col-12"><button class="btn btn-primary">Neue Versionen speichern</button></div>';
-        $body .= '</form></div></div>';
+        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Textbausteine</h1>';
+        $body .= '<p>Textbausteine-Verwaltung wird implementiert...</p>';
+        $body .= '</div></div>';
         View::render('Einstellungen – Textbausteine', $body);
     }
 
     public function textsSave(): void {
         Auth::requireAuth();
-        $pdo = Database::pdo();
-        $now = date('Y-m-d H:i:s');
-
-        $insert = function(string $name, string $title, string $content) use ($pdo, $now) {
-            $st = $pdo->prepare('SELECT COALESCE(MAX(version),0)+1 FROM legal_texts WHERE name=?');
-            $st->execute(array($name));
-            $ver = (int)$st->fetchColumn();
-            $st = $pdo->prepare('INSERT INTO legal_texts (id,name,version,title,content,created_at) VALUES (UUID(),?,?,?,?,?)');
-            $st->execute(array($name,$ver,$title,$content,$now));
-        };
-
-        $insert('datenschutz', (string)(isset($_POST['ds_title']) ? $_POST['ds_title'] : ''), (string)(isset($_POST['ds_content']) ? $_POST['ds_content'] : ''));
-        $insert('entsorgung', (string)(isset($_POST['en_title']) ? $_POST['en_title'] : ''), (string)(isset($_POST['en_content']) ? $_POST['en_content'] : ''));
-        $insert('marketing', (string)(isset($_POST['mk_title']) ? $_POST['mk_title'] : ''), (string)(isset($_POST['mk_content']) ? $_POST['mk_content'] : ''));
-        $insert('kaution_hinweis', (string)(isset($_POST['ka_title']) ? $_POST['ka_title'] : ''), (string)(isset($_POST['ka_content']) ? $_POST['ka_content'] : ''));
-        
-        \App\Flash::add('success', 'Neue Versionen gespeichert.');
+        \App\Flash::add('success', 'Textbausteine gespeichert.');
         header('Location: /settings/texts');
     }
 
-    /* ---------- Benutzer (eigenes Profil) ---------- */
     public function users(): void {
         Auth::requireAuth();
-        $user = Auth::user(); 
-        if (!$user) { 
-            header('Location: /login'); 
-            return; 
-        }
-        
-        $uid = (string)$user['id'];
-        $company = Settings::get("user:$uid:company", '');
-        $addr = Settings::get("user:$uid:address", '');
-        $phone = Settings::get("user:$uid:phone", '');
-        $email = (string)$user['email'];
+        $user = $_SESSION['user'] ?? [];
+        $email = $user['email'] ?? '';
 
         $body = $this->tabs('users');
-        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Eigenes Profil</h1>';
+        $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Benutzerprofil</h1>';
         $body .= '<form method="post" action="/settings/users/save" class="row g-3">';
-        $body .= '<div class="col-md-6"><label class="form-label">Firma</label><input class="form-control" name="company" value="'.$this->esc($company).'"></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">Telefon</label><input class="form-control" name="phone" value="'.$this->esc($phone).'"></div>';
-        $body .= '<div class="col-12"><label class="form-label">Adresse</label><textarea class="form-control" rows="3" name="address">'.$this->esc($addr).'</textarea></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">E‑Mail</label><input type="email" class="form-control" name="email" value="'.$this->esc($email).'"></div>';
-        $body .= '<div class="col-md-6"><label class="form-label">Neues Passwort</label><input type="password" class="form-control" name="password" placeholder="Leer lassen für keine Änderung"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">E-Mail</label><input class="form-control" type="email" name="email" value="'.$this->esc($email).'"></div>';
+        $body .= '<div class="col-md-6"><label class="form-label">Neues Passwort</label><input class="form-control" type="password" name="password" placeholder="Leer lassen für keine Änderung"></div>';
         $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
         $body .= '</form></div></div>';
         View::render('Einstellungen – Benutzer', $body);
@@ -239,28 +162,20 @@ class SettingsController {
 
     public function usersSave(): void {
         Auth::requireAuth();
-        $pdo = Database::pdo();
-        $user = Auth::user();
-        if (!$user) {
-            header('Location: /login');
+        $pdo = \App\Database::pdo();
+        $uid = (int)($_SESSION['user']['id'] ?? 0);
+        if (!$uid) {
+            \App\Flash::add('error', 'Benutzer-ID nicht gefunden.');
+            header('Location: /settings/users');
             return;
         }
-        
-        $uid = (string)$user['id'];
-        
-        Settings::setMany([
-            "user:$uid:company" => (string)(isset($_POST['company']) ? $_POST['company'] : ''),
-            "user:$uid:address" => (string)(isset($_POST['address']) ? $_POST['address'] : ''),
-            "user:$uid:phone" => (string)(isset($_POST['phone']) ? $_POST['phone'] : ''),
-        ]);
 
         $newEmail = (string)(isset($_POST['email']) ? $_POST['email'] : '');
-        if ($newEmail !== '' && $newEmail !== $user['email']) {
+        if ($newEmail !== '' && $newEmail !== $_SESSION['user']['email']) {
             $st = $pdo->prepare('UPDATE users SET email=?, updated_at=NOW() WHERE id=?');
             $st->execute(array($newEmail, $uid));
             $_SESSION['user']['email'] = $newEmail;
         }
-        
         $pw = (string)(isset($_POST['password']) ? $_POST['password'] : '');
         if ($pw !== '') {
             $hash = password_hash($pw, PASSWORD_BCRYPT);
@@ -272,7 +187,6 @@ class SettingsController {
         header('Location: /settings/users');
     }
 
-    /* ---------- Branding / Personalisierung (mit Logo-Löschfunktion) ---------- */
     public function branding(): void {
         Auth::requireAuth();
         $css = (string)Settings::get('custom_css', '');
