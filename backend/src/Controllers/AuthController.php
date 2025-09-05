@@ -21,7 +21,7 @@ final class AuthController
         <div class="d-flex flex-column min-vh-100">
             <div class="container-fluid d-flex flex-column">
                 <div class="row vh-100">
-                    <div class="col-sm-10 col-md-9 col-lg-8 col-xl-7 col-xxl-6 mx-auto d-table h-100">
+                    <div class="col-sm-10 col-md-6 col-lg-5 col-xl-4 col-xxl-4 mx-auto d-table h-100">
                         <div class="d-table-cell align-middle">
                             
                             <div class="text-center mt-4">
@@ -113,30 +113,6 @@ final class AuthController
             
             body {
                 background-color: #f8f9fa;
-            }
-            
-            @media (min-width: 768px) {
-                .card {
-                    min-width: 500px;
-                }
-            }
-            
-            @media (min-width: 992px) {
-                .card {
-                    min-width: 600px;
-                }
-            }
-            
-            @media (min-width: 1200px) {
-                .card {
-                    min-width: 700px;
-                }
-            }
-            
-            @media (min-width: 1400px) {
-                .card {
-                    min-width: 750px;
-                }
             }
         </style>
         <?php
