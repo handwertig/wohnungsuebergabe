@@ -243,16 +243,62 @@ final class SettingsController
         header('Location: /settings/users');
     }
 
-    /* ---------- Branding / Personalisierung (nur Logo + Custom CSS) ---------- */
+        /* ---------- Branding / Personalisierung (mit Logo-Löschfunktion) ---------- */
     public function branding(): void {
         Auth::requireAuth();
-        $css  = (string)Settings::get('custom_css','');
-        $logo = (string)Settings::get('pdf_logo_path','');
+        $css = (string)Settings::get('custom_css', '');
+        $logo = (string)Settings::get('pdf_logo_path', '');
 
-        $body  = $this->tabs('branding');
+        $body = $this->tabs('branding');
         $body .= '<div class="card"><div class="card-body"><h1 class="h6 mb-3">Gestaltung (Personalisierungen)</h1>';
+        
+        // Logo-Upload-Formular
         $body .= '<form method="post" action="/settings/branding/save" enctype="multipart/form-data" class="row g-3">';
-        $body .= '<div class="col-md-6"><label class="form-label">Logo für PDF/Backend</label><input class="form-control" type="file" name="pdf_logo" accept="image/*">';
+        $body .= '<div class="col-md-6">';
+        $body .= '<label class="form-label">Logo für PDF/Backend</label>';
+        $body .= '<input class="form-control" type="file" name="pdf_logo" accept="image/*">';
+        
+        // Aktuelles Logo anzeigen mit Lösch-Button
+        if ($logo && is_file($logo)) {
+            $body .= '<div class="mt-2 p-2 border rounded bg-light">';
+            $body .= '<div class="d-flex justify-content-between align-items-center">';
+            $body .= '<span class="small text-muted">Aktuelles Logo: ' . $this->esc(basename($logo)) . '</span>';
+            $body .= '<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteLogo()">Entfernen</button>';
+            $body .= '</div></div>';
+        } else {
+            $body .= '<div class="form-text">Kein Logo hochgeladen. Bei fehlendem Logo wird "Wohnungsübergabe" als Text angezeigt.</div>';
+        }
+        
+        $body .= '</div>';
+        
+        // Custom CSS
+        $body .= '<div class="col-12">';
+        $body .= '<label class="form-label">Eigenes CSS (Backend‑Theme)</label>';
+        $body .= '<textarea class="form-control" rows="6" name="custom_css">' . $this->esc($css) . '</textarea>';
+        $body .= '<div class="form-text">Wird als &lt;style&gt; mitgeladen – vorsichtig einsetzen.</div>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-12"><button class="btn btn-primary">Speichern</button></div>';
+        $body .= '</form>';
+        
+        // Separates Formular für Logo-Löschung (unsichtbar)
+        $body .= '<form id="deleteLogoForm" method="post" action="/settings/branding/delete-logo" style="display: none;">';
+        $body .= '<input type="hidden" name="delete_logo" value="1">';
+        $body .= '</form>';
+        
+        // JavaScript für Logo-Löschung
+        $body .= '<script>';
+        $body .= 'function deleteLogo() {';
+        $body .= '  if (confirm("Möchten Sie das Logo wirklich entfernen? Es wird dann wieder der Text \"Wohnungsübergabe\" angezeigt.")) {';
+        $body .= '    document.getElementById("deleteLogoForm").submit();';
+        $body .= '  }';
+        $body .= '}';
+        $body .= '</script>';
+        
+        $body .= '</div></div>';
+        View::render('Einstellungen – Gestaltung', $body);
+    }
+/*">';
         if ($logo && is_file($logo)) $body .= '<div class="small text-muted mt-1">Aktuelles Logo: '.$this->esc(basename($logo)).'</div>';
         $body .= '</div>';
         $body .= '<div class="col-12"><label class="form-label">Eigenes CSS (Backend‑Theme)</label><textarea class="form-control" rows="6" name="custom_css">'.$this->esc($css).'</textarea><div class="form-text">Wird als &lt;style&gt; mitgeladen – vorsichtig einsetzen.</div></div>';

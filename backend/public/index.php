@@ -192,6 +192,12 @@ switch ($path) {
         (new SettingsController())->brandingSave();
         break;
 
+    // NEUE ROUTE: Logo löschen
+    case '/settings/branding/delete-logo':
+        Auth::requireAuth();
+        (new SettingsController())->brandingDeleteLogo();
+        break;
+
     // Owners / Managers / Objects
     case '/owners':
         Auth::requireAuth();
