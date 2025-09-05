@@ -13,51 +13,129 @@ use PDO;
 
 final class AuthController
 {
-    /** GET: /login – gestaltete Login-Maske mit CSRF-Protection */
+    /** GET: /login – AdminKit Demo Login Design */
     public function loginForm(): void
     {
         $flashes = Flash::pull();
         ob_start(); ?>
-        <div class="auth-wrap">
-          <div class="card auth-card">
-            <div class="card-body">
-              <div class="d-flex align-items-center gap-2 mb-3">
-                <span class="logo" style="width:18px;height:18px;background:#222357;display:inline-block"></span>
-                <strong>Wohnungsübergabe</strong>
-              </div>
-              <h1 class="h5 mb-3">Anmeldung</h1>
-
-              <?php foreach ($flashes as $f):
-                $cls = ['success'=>'success','error'=>'danger','info'=>'info','warning'=>'warning'][$f['type']] ?? 'secondary'; ?>
-                <div class="alert alert-<?= $cls ?>"><?= htmlspecialchars($f['message']) ?></div>
-              <?php endforeach; ?>
-
-              <form method="post" action="/login" novalidate>
-                <?= Csrf::tokenField() ?>
-                <div class="mb-3">
-                  <label class="form-label">E‑Mail</label>
-                  <input class="form-control" type="email" name="email" required autocomplete="username">
+        <div class="d-flex flex-column min-vh-100">
+            <div class="container-fluid d-flex flex-column">
+                <div class="row vh-100">
+                    <div class="col-sm-10 col-md-8 col-lg-7 col-xl-6 col-xxl-5 mx-auto d-table h-100">
+                        <div class="d-table-cell align-middle">
+                            
+                            <div class="text-center mt-4">
+                                <h1 class="h2">Willkommen!</h1>
+                                <p class="lead">Melden Sie sich in Ihrem Konto an, um fortzufahren</p>
+                            </div>
+                            
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="m-sm-4">
+                                        
+                                        <?php foreach ($flashes as $f):
+                                            $cls = ['success'=>'success','error'=>'danger','info'=>'info','warning'=>'warning'][$f['type']] ?? 'secondary'; ?>
+                                            <div class="alert alert-<?= $cls ?> alert-dismissible">
+                                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                                <?= htmlspecialchars($f['message']) ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                        
+                                        <form method="post" action="/login" novalidate>
+                                            <?= Csrf::tokenField() ?>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label">E-Mail-Adresse</label>
+                                                <input class="form-control form-control-lg" type="email" name="email" placeholder="Geben Sie Ihre E-Mail-Adresse ein" required autocomplete="username" />
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label">Passwort</label>
+                                                <input class="form-control form-control-lg" type="password" name="password" placeholder="Geben Sie Ihr Passwort ein" required autocomplete="current-password" />
+                                            </div>
+                                            
+                                            <div class="d-flex align-items-center mb-4">
+                                                <div class="form-check align-items-center">
+                                                    <input id="customControlInline" type="checkbox" class="form-check-input" value="remember-me" name="remember" checked>
+                                                    <label class="form-check-label text-small" for="customControlInline">Angemeldet bleiben</label>
+                                                </div>
+                                                <div class="ms-auto">
+                                                    <a href="/password/forgot" class="text-small">Passwort vergessen?</a>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="d-grid gap-2">
+                                                <button type="submit" class="btn btn-lg btn-primary">Anmelden</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="text-center mb-3 mt-4">
+                                <p class="text-muted">
+                                    Haben Sie noch kein Konto? <a href="/setup" class="text-decoration-none">Hier registrieren</a>
+                                </p>
+                            </div>
+                            
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                  <label class="form-label">Passwort</label>
-                  <input class="form-control" type="password" name="password" required autocomplete="current-password">
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="remember" id="remember">
-                    <label class="form-check-label" for="remember">Angemeldet bleiben</label>
-                  </div>
-                  <a class="small" href="/password/forgot">Passwort vergessen?</a>
-                </div>
-                <button class="btn btn-primary w-100">Einloggen 🔐</button>
-              </form>
             </div>
-            <div class="card-footer small text-muted">&copy; <?= date('Y') ?> Wohnungsübergabe</div>
-          </div>
         </div>
+        
+        <style>
+            .vh-100 {
+                min-height: 100vh;
+            }
+            
+            .card {
+                border: 0;
+                box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+                border-radius: 0.5rem;
+            }
+            
+            .btn-lg {
+                border-radius: 0.375rem;
+                padding: 0.75rem 1.5rem;
+                font-size: 1.125rem;
+            }
+            
+            .form-control-lg {
+                border-radius: 0.375rem;
+                padding: 0.75rem 1rem;
+                font-size: 1.125rem;
+            }
+            
+            .text-small {
+                font-size: 0.875rem;
+            }
+            
+            body {
+                background-color: #f8f9fa;
+            }
+            
+            @media (min-width: 768px) {
+                .card {
+                    min-width: 400px;
+                }
+            }
+            
+            @media (min-width: 992px) {
+                .card {
+                    min-width: 480px;
+                }
+            }
+            
+            @media (min-width: 1200px) {
+                .card {
+                    min-width: 520px;
+                }
+            }
+        </style>
         <?php
         $html = ob_get_clean();
-        View::render('Login', $html);
+        View::render('Anmelden – Wohnungsübergabe', $html);
     }
 
     /** POST: /login - mit CSRF-Validation */
