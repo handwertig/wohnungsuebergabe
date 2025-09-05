@@ -6,8 +6,9 @@ namespace App;
 use PDO;
 
 /**
- * SystemLogger - FIXED VERSION
- * Vereinfachte, garantiert funktionierende Version
+ * SystemLogger - Umfassendes Logging aller Systemaktivitäten
+ * 
+ * Protokolliert alle wichtigen Aktionen im System für Compliance und Audit-Zwecke
  */
 final class SystemLogger
 {
@@ -295,11 +296,11 @@ final class SystemLogger
     }
 
     /**
-     * FIXED: Vereinfachte getLogs() Methode - Garantiert funktionsfähig
+     * Lädt Log-Einträge mit Filter und Pagination (MariaDB/MySQL kompatibel)
      */
     public static function getLogs(
         int $page = 1,
-        int $perPage = 50,
+        int $perPage = 100,
         ?string $search = null,
         ?string $actionType = null,
         ?string $userEmail = null,
@@ -314,73 +315,67 @@ final class SystemLogger
             
             // Sichere Parameter-Validierung
             $page = max(1, (int)$page);
-            $perPage = max(1, min(100, (int)$perPage));
+            $perPage = max(1, min(1000, (int)$perPage)); // Max 1000 Einträge
             $offset = ($page - 1) * $perPage;
             
-            // Basis-Query für Count und Daten
-            $whereConditions = [];
+            $where = [];
             $params = [];
             
-            // Filter nur wenn tatsächlich gesetzt
-            if (!empty($search)) {
-                $whereConditions[] = "(action_description LIKE ? OR user_email LIKE ?)";
-                $searchTerm = '%' . $search . '%';
+            if ($search && trim($search) !== '') {
+                $where[] = "(action_description LIKE ? OR user_email LIKE ? OR COALESCE(resource_id, '') LIKE ?)";
+                $searchTerm = '%' . trim($search) . '%';
                 $params[] = $searchTerm;
                 $params[] = $searchTerm;
+                $params[] = $searchTerm;
             }
             
-            if (!empty($actionType)) {
-                $whereConditions[] = "action_type = ?";
-                $params[] = $actionType;
+            if ($actionType && trim($actionType) !== '') {
+                $where[] = "action_type = ?";
+                $params[] = trim($actionType);
             }
             
-            if (!empty($userEmail)) {
-                $whereConditions[] = "user_email = ?";
-                $params[] = $userEmail;
+            if ($userEmail && trim($userEmail) !== '') {
+                $where[] = "user_email = ?";
+                $params[] = trim($userEmail);
             }
             
-            if (!empty($dateFrom)) {
-                $whereConditions[] = "DATE(created_at) >= ?";
-                $params[] = $dateFrom;
+            if ($dateFrom && trim($dateFrom) !== '') {
+                $where[] = "DATE(created_at) >= ?";
+                $params[] = trim($dateFrom);
             }
             
-            if (!empty($dateTo)) {
-                $whereConditions[] = "DATE(created_at) <= ?";
-                $params[] = $dateTo;
+            if ($dateTo && trim($dateTo) !== '') {
+                $where[] = "DATE(created_at) <= ?";
+                $params[] = trim($dateTo);
             }
             
-            $whereClause = !empty($whereConditions) ? 'WHERE ' . implode(' AND ', $whereConditions) : '';
+            $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
             
-            // 1. Count Query
+            // Gesamtanzahl ermitteln
             $countSql = "SELECT COUNT(*) FROM system_log $whereClause";
             $stmt = $pdo->prepare($countSql);
             $stmt->execute($params);
             $totalCount = (int)$stmt->fetchColumn();
             
-            // 2. Data Query - Vereinfacht und direkt
+            // Paginierte Daten laden - LIMIT und OFFSET direkt einbauen (sicher durch Validierung)
             $dataSql = "SELECT 
                 user_email, 
-                IFNULL(user_ip, '') as ip_address, 
+                COALESCE(user_ip, '') as ip_address, 
                 action_type as action, 
                 action_description as details, 
-                IFNULL(resource_type, '') as entity_type, 
-                IFNULL(resource_id, '') as entity_id, 
+                COALESCE(resource_type, '') as entity_type, 
+                COALESCE(resource_id, '') as entity_id, 
                 created_at as timestamp
             FROM system_log 
             $whereClause 
             ORDER BY created_at DESC 
-            LIMIT ? OFFSET ?";
-            
-            // Parameter für Data Query
-            $dataParams = $params;
-            $dataParams[] = $perPage;
-            $dataParams[] = $offset;
+            LIMIT $perPage OFFSET $offset";
             
             $stmt = $pdo->prepare($dataSql);
-            $stmt->execute($dataParams);
+            $stmt->execute($params);
             $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            $totalPages = $totalCount > 0 ? (int)ceil($totalCount / $perPage) : 1;
+            $totalPages = (int)ceil($totalCount / $perPage);
             
             return [
                 'logs' => $logs,
@@ -396,53 +391,18 @@ final class SystemLogger
             
         } catch (\Throwable $e) {
             error_log("SystemLogger::getLogs Error: " . $e->getMessage());
-            
-            // Fallback: Versuche einfachste mögliche Query
-            try {
-                $pdo = Database::pdo();
-                $stmt = $pdo->query("SELECT 
-                    user_email, 
-                    '' as ip_address, 
-                    action_type as action, 
-                    action_description as details, 
-                    '' as entity_type, 
-                    '' as entity_id, 
-                    created_at as timestamp
-                FROM system_log 
-                ORDER BY created_at DESC 
-                LIMIT 50");
-                
-                $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                $count = count($logs);
-                
-                return [
-                    'logs' => $logs,
-                    'pagination' => [
-                        'total_count' => $count,
-                        'total_pages' => 1,
-                        'current_page' => 1,
-                        'per_page' => 50,
-                        'has_prev' => false,
-                        'has_next' => false
-                    ]
-                ];
-                
-            } catch (\Throwable $fallbackError) {
-                error_log("SystemLogger Fallback Error: " . $fallbackError->getMessage());
-                
-                // Letzte Möglichkeit: Leeres aber valides Ergebnis
-                return [
-                    'logs' => [],
-                    'pagination' => [
-                        'total_count' => 0,
-                        'total_pages' => 0,
-                        'current_page' => 1,
-                        'per_page' => $perPage,
-                        'has_prev' => false,
-                        'has_next' => false
-                    ]
-                ];
-            }
+            // Fallback: leeres Ergebnis zurückgeben
+            return [
+                'logs' => [],
+                'pagination' => [
+                    'total_count' => 0,
+                    'total_pages' => 0,
+                    'current_page' => 1,
+                    'per_page' => $perPage,
+                    'has_prev' => false,
+                    'has_next' => false
+                ]
+            ];
         }
     }
     
@@ -488,55 +448,55 @@ final class SystemLogger
     }
     
     /**
-     * FIXED: Fügt IMMER initiale Test-Daten hinzu (für Demo-Zwecke)
+     * Fügt initiale Test-Daten hinzu falls die Tabelle leer ist
      */
     public static function addInitialData(): void {
         try {
             self::ensureTableExists();
             $pdo = Database::pdo();
             
-            // Lösche alte Test-Daten
-            $pdo->exec("DELETE FROM system_log WHERE user_email IN ('system', 'admin@example.com', 'test@example.com')");
+            // Prüfe ob bereits Daten vorhanden sind
+            $stmt = $pdo->query("SELECT COUNT(*) FROM system_log");
+            $count = (int)$stmt->fetchColumn();
             
-            // Füge IMMER neue Test-Daten hinzu
-            $entries = [
-                ['admin@handwertig.com', 'login', 'Administrator hat sich angemeldet', '192.168.1.100', 'NOW() - INTERVAL 2 HOUR'],
-                ['admin@handwertig.com', 'settings_viewed', 'System-Log Seite aufgerufen', '192.168.1.100', 'NOW() - INTERVAL 1 HOUR 30 MINUTE'],
-                ['user@handwertig.com', 'protocol_created', 'Neues Einzug-Protokoll für Familie Müller erstellt', '192.168.1.101', 'NOW() - INTERVAL 1 HOUR'],
-                ['admin@handwertig.com', 'pdf_generated', 'PDF für Protokoll generiert (Version 1)', '192.168.1.100', 'NOW() - INTERVAL 45 MINUTE'],
-                ['user@handwertig.com', 'email_sent', 'E-Mail an Eigentümer erfolgreich versendet', '192.168.1.101', 'NOW() - INTERVAL 30 MINUTE'],
-                ['system', 'system_setup', 'Wohnungsübergabe-System erfolgreich installiert', '127.0.0.1', 'NOW() - INTERVAL 15 MINUTE'],
-                ['admin@handwertig.com', 'settings_updated', 'Einstellungen aktualisiert: branding', '192.168.1.100', 'NOW() - INTERVAL 10 MINUTE'],
-                ['system', 'migration_executed', 'SystemLogger erfolgreich konfiguriert', '127.0.0.1', 'NOW() - INTERVAL 5 MINUTE'],
-                ['admin@handwertig.com', 'systemlog_fixed', 'SystemLog Problem erfolgreich behoben', '192.168.1.100', 'NOW()']
-            ];
-            
-            foreach ($entries as $entry) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO system_log (id, user_email, action_type, action_description, user_ip, created_at) VALUES 
-                    (UUID(), ?, ?, ?, ?, $entry[4])
-                ");
-                $stmt->execute([$entry[0], $entry[1], $entry[2], $entry[3]]);
-            }
-            
-            // Füge noch 15 zusätzliche Demo-Einträge hinzu
-            $demoActions = ['protocol_viewed', 'pdf_downloaded', 'export_generated', 'protocol_updated', 'login', 'logout', 'settings_accessed'];
-            $demoUsers = ['admin@handwertig.com', 'user@handwertig.com', 'manager@handwertig.com', 'eigentumer@example.com'];
-            
-            for ($i = 0; $i < 15; $i++) {
-                $action = $demoActions[array_rand($demoActions)];
-                $user = $demoUsers[array_rand($demoUsers)];
-                $description = ucfirst(str_replace('_', ' ', $action)) . " - Demo Entry " . ($i + 1);
-                $ip = '192.168.1.' . (100 + ($i % 20));
-                $minutes = ($i + 1) * 20;
+            if ($count < 5) { // Füge mehr Test-Daten hinzu
+                // Lösche existierende Test-Daten
+                $pdo->exec("DELETE FROM system_log WHERE user_email = 'system'");
                 
+                // Füge umfassende Test-Einträge hinzu
                 $stmt = $pdo->prepare("
-                    INSERT INTO system_log (id, user_email, action_type, action_description, user_ip, created_at) 
-                    VALUES (UUID(), ?, ?, ?, ?, NOW() - INTERVAL ? MINUTE)
+                    INSERT INTO system_log (id, user_email, action_type, action_description, resource_type, resource_id, user_ip, created_at) VALUES 
+                    (UUID(), 'admin@example.com', 'login', 'Administrator hat sich angemeldet', NULL, NULL, '192.168.1.100', NOW() - INTERVAL 2 HOUR),
+                    (UUID(), 'admin@example.com', 'settings_viewed', 'System-Log Seite aufgerufen', NULL, NULL, '192.168.1.100', NOW() - INTERVAL 1 HOUR),
+                    (UUID(), 'user@example.com', 'protocol_created', 'Neues Einzug-Protokoll für Mustermann erstellt', 'protocol', UUID(), '192.168.1.101', NOW() - INTERVAL 45 MINUTE),
+                    (UUID(), 'admin@example.com', 'pdf_generated', 'PDF für Protokoll generiert (Version 1)', 'protocol', UUID(), '192.168.1.100', NOW() - INTERVAL 30 MINUTE),
+                    (UUID(), 'user@example.com', 'email_sent', 'E-Mail an Mieter (max@mustermann.de) erfolgreich versendet', 'protocol', UUID(), '192.168.1.101', NOW() - INTERVAL 15 MINUTE),
+                    (UUID(), 'system', 'system_setup', 'AdminKit Theme erfolgreich implementiert', NULL, NULL, '127.0.0.1', NOW() - INTERVAL 10 MINUTE),
+                    (UUID(), 'admin@example.com', 'settings_updated', 'Einstellungen aktualisiert: branding', NULL, NULL, '192.168.1.100', NOW() - INTERVAL 5 MINUTE),
+                    (UUID(), 'system', 'migration_executed', 'SystemLogger erfolgreich konfiguriert', NULL, NULL, '127.0.0.1', NOW())
                 ");
-                $stmt->execute([$user, $action, $description, $ip, $minutes]);
+                $stmt->execute();
+                
+                // Füge noch mehr Test-Einträge für bessere Demo hinzu
+                for ($i = 0; $i < 15; $i++) {
+                    $actions = ['protocol_viewed', 'pdf_viewed', 'export_generated', 'protocol_updated', 'login', 'logout'];
+                    $users = ['admin@example.com', 'user@example.com', 'manager@example.com'];
+                    $entities = ['protocol', 'draft', 'user', 'object'];
+                    
+                    $action = $actions[array_rand($actions)];
+                    $user = $users[array_rand($users)];
+                    $entity = $entities[array_rand($entities)];
+                    $description = ucfirst(str_replace('_', ' ', $action)) . ' - Test entry #' . ($i + 1);
+                    $ip = '192.168.1.' . (100 + ($i % 10));
+                    $minutes = $i * 10 + 20;
+                    
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_log (id, user_email, action_type, action_description, resource_type, resource_id, user_ip, created_at) 
+                        VALUES (UUID(), ?, ?, ?, ?, UUID(), ?, NOW() - INTERVAL ? MINUTE)
+                    ");
+                    $stmt->execute([$user, $action, $description, $entity, $ip, $minutes]);
+                }
             }
-            
         } catch (\Throwable $e) {
             error_log("SystemLogger::addInitialData Error: " . $e->getMessage());
         }
