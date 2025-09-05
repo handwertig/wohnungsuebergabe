@@ -674,7 +674,7 @@ final class SettingsController
     /* ---------- System-Logs ---------- */
     
     /**
-     * System-Logs anzeigen
+     * System-Logs anzeigen (vereinfachte Version ohne komplexe Queries)
      */
     public function systemLogs(): void {
         Auth::requireAuth();
@@ -685,36 +685,38 @@ final class SettingsController
         try {
             $pdo = Database::pdo();
             
-            // Anzahl der Log-Einträge ermitteln
+            // Erst prüfen ob die Tabelle überhaupt existiert
+            $stmt = $pdo->query("SHOW TABLES LIKE 'system_log'");
+            if (!$stmt->fetch()) {
+                throw new \Exception("Tabelle system_log existiert nicht");
+            }
+            
+            // Einfachste Anzahl-Abfrage
             $stmt = $pdo->query("SELECT COUNT(*) FROM system_log");
             $totalCount = (int)$stmt->fetchColumn();
             
-            // Die neuesten 50 Log-Einträge laden
+            // Einfachste Daten-Abfrage mit minimalen Feldern
             $stmt = $pdo->query("
                 SELECT 
-                    user_email, 
-                    COALESCE(user_ip, '') as ip_address, 
-                    action_type as action, 
-                    action_description as details, 
-                    COALESCE(resource_type, '') as entity_type, 
-                    COALESCE(resource_id, '') as entity_id, 
+                    COALESCE(user_email, 'system') as user_email,
+                    COALESCE(user_ip, '127.0.0.1') as ip_address,
+                    COALESCE(action_type, 'unknown') as action,
+                    COALESCE(action_description, 'No description') as details,
                     created_at as timestamp
                 FROM system_log 
                 ORDER BY created_at DESC 
-                LIMIT 50
+                LIMIT 20
             ");
             
-            $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $logs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
             
         } catch (\Throwable $e) {
-            // Bei Datenbankfehlern Fallback-Eintrag
+            // Bei jedem Fehler: Einfachen Fallback-Eintrag anzeigen
             $logs = [[
                 "user_email" => "SYSTEM",
                 "ip_address" => "127.0.0.1",
                 "action" => "error",
-                "details" => "Database Error: " . $e->getMessage(),
-                "entity_type" => "system",
-                "entity_id" => "",
+                "details" => "Fehler beim Laden der System-Logs: " . $e->getMessage(),
                 "timestamp" => date("Y-m-d H:i:s")
             ]];
             $totalCount = 1;
@@ -722,64 +724,47 @@ final class SettingsController
         
         $body = $this->tabs("systemlogs");
         
-        // Header mit Statistiken
+        // Einfacher Header
         $body .= '<div class="card mb-3">';
         $body .= '<div class="card-body">';
-        $body .= '<div class="d-flex justify-content-between align-items-center">';
-        $body .= '<div>';
-        $body .= '<h3 class="mb-1">System-Aktivitätslogs</h3>';
-        $body .= '<p class="text-muted mb-0">Übersicht aller Systemaktivitäten und Benutzeraktionen</p>';
-        $body .= '</div>';
-        $body .= '<div class="text-end">';
-        $body .= '<span class="badge bg-primary fs-6">Gesamt: ' . number_format($totalCount) . '</span>';
-        $body .= '</div>';
-        $body .= '</div>';
+        $body .= '<h3 class="mb-1">System-Logs</h3>';
+        $body .= '<p class="text-muted mb-0">Gesamt: ' . $totalCount . ' Einträge</p>';
         $body .= '</div></div>';
         
-        // Log-Tabelle
+        // Einfache Tabelle
         if (empty($logs)) {
-            $body .= '<div class="alert alert-info">';
-            $body .= '<i class="bi bi-info-circle me-2"></i>';
-            $body .= 'Noch keine Log-Einträge vorhanden.';
-            $body .= '</div>';
+            $body .= '<div class="alert alert-info">Keine Log-Einträge gefunden.</div>';
         } else {
             $body .= '<div class="card">';
             $body .= '<div class="table-responsive">';
-            $body .= '<table class="table table-hover mb-0">';
+            $body .= '<table class="table table-striped">';
             $body .= '<thead class="table-dark">';
             $body .= '<tr>';
-            $body .= '<th>Zeitstempel</th>';
+            $body .= '<th>Zeit</th>';
             $body .= '<th>Benutzer</th>';
             $body .= '<th>Aktion</th>';
             $body .= '<th>Details</th>';
-            $body .= '<th>IP-Adresse</th>';
+            $body .= '<th>IP</th>';
             $body .= '</tr>';
             $body .= '</thead>';
             $body .= '<tbody>';
             
             foreach ($logs as $log) {
-                $timestamp = date("d.m.Y H:i:s", strtotime($log["timestamp"]));
+                $timestamp = date("H:i:s", strtotime($log["timestamp"]));
                 $badgeClass = $this->getActionBadgeClass($log["action"]);
                 
                 $body .= '<tr>';
-                $body .= '<td><small>' . $this->esc($timestamp) . '</small></td>';
+                $body .= '<td>' . $this->esc($timestamp) . '</td>';
                 $body .= '<td>' . $this->esc($log["user_email"]) . '</td>';
                 $body .= '<td><span class="badge ' . $badgeClass . '">' . $this->esc($log["action"]) . '</span></td>';
-                $body .= '<td>' . $this->esc(mb_substr($log["details"], 0, 80)) . (mb_strlen($log["details"]) > 80 ? '...' : '') . '</td>';
-                $body .= '<td><small>' . $this->esc($log["ip_address"]) . '</small></td>';
+                $body .= '<td>' . $this->esc(substr($log["details"], 0, 60)) . (strlen($log["details"]) > 60 ? '...' : '') . '</td>';
+                $body .= '<td>' . $this->esc($log["ip_address"]) . '</td>';
                 $body .= '</tr>';
             }
             
             $body .= '</tbody>';
             $body .= '</table>';
             $body .= '</div></div>';
-            
-            if ($totalCount > 50) {
-                $body .= '<div class="alert alert-info mt-3">';
-                $body .= '<i class="bi bi-info-circle me-2"></i>';
-                $body .= 'Es werden die neuesten 50 von insgesamt ' . number_format($totalCount) . ' Log-Einträgen angezeigt.';
-                $body .= '</div>';
-            }
         }
         
         View::render("Einstellungen – System-Log", $body);
