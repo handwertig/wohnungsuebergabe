@@ -42,6 +42,22 @@ Dieses Dokument dient als Übersicht für Entwickler, Architekturentscheidungen 
 - **Mail-Versand funktioniert**: `send()` Methode mit PHPMailer, SMTP-Settings und Logging in `email_log` + `protocol_events`
 - **Routing korrigiert**: `/protocols/edit` zeigt jetzt die richtige `edit()` Methode mit Historie-Anzeige
 
+## Erledigte Aufgaben (2025-09-05)
+
+✅ **PDF-System repariert**
+   - Verbesserte Fehlerbehandlung und Debugging in PDF-Controller
+   - Robuste Verzeichnis-Erstellung im PdfService
+   - Cache-Header für PDF-Ausgabe hinzugefügt
+   - Detailliertes Error-Logging implementiert
+
+✅ **Historie & Versand-Tab hinzugefügt**
+   - Neuer Tab "Historie & Versand" im Protokoll-Editor
+   - Dreispaltige Anzeige: Versionen, Ereignisse, E-Mail-Versand
+   - Event-Logging beim Speichern von Versionen verbessert
+   - Schnellversand-Buttons direkt verfügbar
+
+---
+
 ## Offene ToDos / Backlog
 
 1. **PDF-Hardening**
