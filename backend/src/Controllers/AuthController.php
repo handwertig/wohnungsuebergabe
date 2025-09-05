@@ -21,7 +21,7 @@ final class AuthController
         <div class="d-flex flex-column min-vh-100">
             <div class="container-fluid d-flex flex-column">
                 <div class="row vh-100">
-                    <div class="col-sm-10 col-md-8 col-lg-7 col-xl-6 col-xxl-5 mx-auto d-table h-100">
+                    <div class="col-sm-10 col-md-9 col-lg-8 col-xl-7 col-xxl-6 mx-auto d-table h-100">
                         <div class="d-table-cell align-middle">
                             
                             <div class="text-center mt-4">
@@ -31,7 +31,7 @@ final class AuthController
                             
                             <div class="card">
                                 <div class="card-body">
-                                    <div class="m-sm-4">
+                                    <div class="m-sm-5">
                                         
                                         <?php foreach ($flashes as $f):
                                             $cls = ['success'=>'success','error'=>'danger','info'=>'info','warning'=>'warning'][$f['type']] ?? 'secondary'; ?>
@@ -44,12 +44,12 @@ final class AuthController
                                         <form method="post" action="/login" novalidate>
                                             <?= Csrf::tokenField() ?>
                                             
-                                            <div class="mb-3">
+                                            <div class="mb-4">
                                                 <label class="form-label">E-Mail-Adresse</label>
                                                 <input class="form-control form-control-lg" type="email" name="email" placeholder="Geben Sie Ihre E-Mail-Adresse ein" required autocomplete="username" />
                                             </div>
                                             
-                                            <div class="mb-3">
+                                            <div class="mb-4">
                                                 <label class="form-label">Passwort</label>
                                                 <input class="form-control form-control-lg" type="password" name="password" placeholder="Geben Sie Ihr Passwort ein" required autocomplete="current-password" />
                                             </div>
@@ -117,19 +117,25 @@ final class AuthController
             
             @media (min-width: 768px) {
                 .card {
-                    min-width: 400px;
+                    min-width: 500px;
                 }
             }
             
             @media (min-width: 992px) {
                 .card {
-                    min-width: 480px;
+                    min-width: 600px;
                 }
             }
             
             @media (min-width: 1200px) {
                 .card {
-                    min-width: 520px;
+                    min-width: 700px;
+                }
+            }
+            
+            @media (min-width: 1400px) {
+                .card {
+                    min-width: 750px;
                 }
             }
         </style>
