@@ -132,7 +132,7 @@ final class AuthController
         if ($email === '' || $pass === '') {
             Flash::add('error', 'Login fehlgeschlagen. Bitte Zugangsdaten prüfen.');
             header('Location: /login?error=1'); 
-            return;
+            exit;
         }
         
         $pdo = Database::pdo();
@@ -146,7 +146,7 @@ final class AuthController
             
             Flash::add('error', 'Login fehlgeschlagen. Bitte Zugangsdaten prüfen.');
             header('Location: /login?error=1'); 
-            return;
+            exit;
         }
 
         // Session starten und User setzen
@@ -163,6 +163,7 @@ final class AuthController
         
         Flash::add('success', 'Erfolgreich angemeldet.');
         header('Location: /protocols');
+        exit;
     }
 
     /** GET: /logout */
@@ -199,5 +200,6 @@ final class AuthController
         
         Flash::add('info', 'Sie wurden abgemeldet.');
         header('Location: /login');
+        exit;
     }
 }
