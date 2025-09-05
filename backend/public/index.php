@@ -25,8 +25,16 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 
 // Routing
 switch ($path) {
-    // Root / Health
+    // Root - Redirect to login or dashboard based on auth status
     case '/':
+        if (Auth::check()) {
+            header('Location: /protocols');
+        } else {
+            header('Location: /login');
+        }
+        exit;
+        
+    // Health check endpoint
     case '/health':
         (new HomeController())->index();
         break;
