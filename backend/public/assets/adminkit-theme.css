@@ -579,7 +579,6 @@ h1, h2, h3, h4, h5, h6 {
 
 .auth-card {
   width: 100%;
-  max-width: 400px;
   border: 1px solid var(--g-200);
   border-radius: var(--adminkit-border-radius);
   background: var(--white);
