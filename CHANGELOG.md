@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2025-09-06
+
+### 🔧 Kritische Fehlerbehebung
+- **BEHOBEN:** Kollationsproblem in MariaDB (`utf8mb4_uca1400_ai_ci` vs `utf8mb4_unicode_ci`)
+- **BEHOBEN:** Schema-Inkonsistenz in `protocol_versions` Tabelle (`version_no` vs `version_number`)
+- **BEHOBEN:** PDF-Versionierung VIEW `protocol_versions_with_pdfs` funktioniert wieder
+- **BEHOBEN:** JOIN-Operationen mit expliziter Kollations-Behandlung
+
+### 🛠️ Wartungstools
+- **NEU:** `ultimate_fix.sh` - Automatische Datenbank-Reparatur
+- **NEU:** `debug_collation.sh` - Kollations-Analyse-Tool
+- **NEU:** `fix_collation_problem.sh` - Spezifische Kollations-Reparatur
+- **NEU:** Migrationen 027-029 für Kollations- und Schema-Fixes
+
+### 📚 Dokumentation
+- **NEU:** `TROUBLESHOOTING_COLLATION.md` - Umfassende Fehlerbehebung
+- **ERWEITERT:** `Notes.md` mit detaillierter Problemanalyse
+- **VERBESSERT:** Schritt-für-Schritt Anleitungen für Datenbankprobleme
+
+### ⚡ Performance & Stabilität
+- **OPTIMIERT:** Alle Tabellen einheitlich auf `utf8mb4_unicode_ci`
+- **VERBESSERT:** Container-Management mit automatischen Neustarts
+- **STABILISIERT:** Error-Handling mit besseren Fallback-Mechanismen
+
 ## [2.0.0] - 2025-01-20
 
 ### 🎨 Major Design Overhaul
