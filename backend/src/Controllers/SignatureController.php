@@ -5,531 +5,636 @@ namespace App\Controllers;
 
 use App\Auth;
 use App\Database;
-use App\View;
+use App\Settings;
 use App\Flash;
-use App\AuditLogger;
+use App\SignatureHelper;
 use PDO;
 
 /**
- * Digital Signature Controller
- * Open Source Lösung für rechtssichere digitale Signaturen
- * Implementiert mit Signature Pad (MIT License)
+ * SignatureController
+ * 
+ * Verwaltet digitale Unterschriften für Protokolle
+ * Unterstützt sowohl lokale Signatur (signature-pad.js) als auch DocuSign
  */
 final class SignatureController
 {
     /**
-     * Zeigt die Signatur-Seite für ein Protokoll
+     * Zeigt das Signatur-Interface für ein Protokoll
      */
     public function sign(): void
     {
         Auth::requireAuth();
-        
         $protocolId = $_GET['protocol_id'] ?? '';
-        if (!$protocolId) {
-            Flash::add('error', 'Kein Protokoll angegeben.');
+        
+        if (empty($protocolId)) {
+            Flash::add('error', 'Protokoll-ID fehlt.');
             header('Location: /protocols');
-            exit;
+            return;
         }
         
+        // Provider aus Einstellungen laden
+        $provider = Settings::get('signature_provider', 'local');
+        
+        if ($provider === 'docusign') {
+            // Weiterleitung zu DocuSign
+            $this->redirectToDocuSign($protocolId);
+        } else {
+            // Lokale Signatur anzeigen
+            $this->showLocalSignature($protocolId);
+        }
+    }
+    
+    /**
+     * Zeigt das lokale Signatur-Interface
+     */
+    private function showLocalSignature(string $protocolId): void
+    {
         $pdo = Database::pdo();
-        $stmt = $pdo->prepare('
-            SELECT p.*, u.label as unit_label, o.street, o.house_no, o.city 
+        
+        // Protokoll-Daten laden
+        $stmt = $pdo->prepare("
+            SELECT p.*, u.label as unit_label, o.city, o.street, o.house_no
             FROM protocols p 
-            JOIN units u ON p.unit_id = u.id 
-            JOIN objects o ON u.object_id = o.id 
+            JOIN units u ON u.id = p.unit_id 
+            JOIN objects o ON o.id = u.object_id 
             WHERE p.id = ? AND p.deleted_at IS NULL
-        ');
+        ");
         $stmt->execute([$protocolId]);
         $protocol = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$protocol) {
             Flash::add('error', 'Protokoll nicht gefunden.');
             header('Location: /protocols');
-            exit;
+            return;
         }
         
-        $payload = json_decode($protocol['payload'] ?? '{}', true) ?: [];
+        // Einstellungen laden
+        $disclaimer = Settings::get('local_signature_disclaimer', 
+            'Mit Ihrer digitalen Unterschrift bestätigen Sie die Richtigkeit der Angaben im Protokoll.');
+        $legalText = Settings::get('local_signature_legal_text', 
+            'Die digitale Unterschrift ist rechtlich bindend gemäß eIDAS-Verordnung (EU) Nr. 910/2014.');
+        $requireAll = Settings::get('signature_require_all', 'false') === 'true';
+        $allowWitness = Settings::get('signature_allow_witness', 'true') === 'true';
         
-        ob_start(); ?>
+        // Bestehende Signaturen laden
+        $stmt = $pdo->prepare("
+            SELECT * FROM protocol_signatures 
+            WHERE protocol_id = ? 
+            ORDER BY created_at DESC
+        ");
+        $stmt->execute([$protocolId]);
+        $existingSignatures = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        <div class="container-fluid">
-            <div class="row justify-content-center">
-                <div class="col-lg-8">
-                    <!-- Header -->
-                    <div class="card mb-4">
-                        <div class="card-body">
-                            <h4 class="card-title mb-3">
-                                <i class="bi bi-pen"></i> Digitale Unterschriften
-                            </h4>
-                            <p class="text-muted mb-0">
-                                Protokoll für <?= htmlspecialchars($protocol['unit_label']) ?>, 
-                                <?= htmlspecialchars($protocol['street']) ?> <?= htmlspecialchars($protocol['house_no']) ?>, 
-                                <?= htmlspecialchars($protocol['city']) ?>
-                            </p>
-                            <p class="text-muted">
-                                <small>Typ: <?= ucfirst($protocol['type']) ?> | 
-                                Datum: <?= date('d.m.Y', strtotime($protocol['created_at'])) ?></small>
-                            </p>
+        // HTML generieren
+        $html = '<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protokoll unterschreiben</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .signature-pad-wrapper {
+            position: relative;
+            border: 2px solid #dee2e6;
+            border-radius: 0.375rem;
+            background: white;
+            margin-bottom: 1rem;
+        }
+        .signature-pad {
+            width: 100%;
+            height: 200px;
+            cursor: crosshair;
+        }
+        .signature-pad-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .signature-preview {
+            max-width: 300px;
+            height: 100px;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            padding: 0.25rem;
+        }
+        .protocol-info {
+            background: #f8f9fa;
+            border-left: 4px solid #0d6efd;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <h1 class="h3 mb-4">
+                    <i class="bi bi-pen me-2"></i>Protokoll digital unterschreiben
+                </h1>
+                
+                <!-- Protokoll-Info -->
+                <div class="protocol-info">
+                    <h6 class="text-primary mb-2">Protokoll-Details</h6>
+                    <div class="row small">
+                        <div class="col-sm-6">
+                            <strong>Objekt:</strong> ' . htmlspecialchars($protocol['street'] . ' ' . $protocol['house_no']) . '<br>
+                            <strong>Einheit:</strong> ' . htmlspecialchars($protocol['unit_label']) . '<br>
+                            <strong>Ort:</strong> ' . htmlspecialchars($protocol['city']) . '
+                        </div>
+                        <div class="col-sm-6">
+                            <strong>Typ:</strong> ' . htmlspecialchars(ucfirst($protocol['type'] ?? 'einzug')) . '<br>
+                            <strong>Mieter:</strong> ' . htmlspecialchars($protocol['tenant_name']) . '<br>
+                            <strong>Datum:</strong> ' . date('d.m.Y', strtotime($protocol['created_at'])) . '
                         </div>
                     </div>
-                    
-                    <!-- Signatur-Formular -->
-                    <form id="signatureForm" method="post" action="/signature/save">
-                        <input type="hidden" name="protocol_id" value="<?= htmlspecialchars($protocolId) ?>">
-                        
-                        <!-- Mieter Unterschrift -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h5 class="mb-0">
-                                    <i class="bi bi-person"></i> Unterschrift Mieter
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label">Name *</label>
-                                        <input type="text" class="form-control" name="tenant_name" 
-                                               value="<?= htmlspecialchars($payload['tenant']['name'] ?? '') ?>" required>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">E-Mail</label>
-                                        <input type="email" class="form-control" name="tenant_email" 
-                                               value="<?= htmlspecialchars($payload['tenant']['email'] ?? '') ?>">
-                                    </div>
+                </div>
+                
+                <!-- Disclaimer -->
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    ' . htmlspecialchars($disclaimer) . '
+                </div>
+                
+                <!-- Signatur-Formular -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Neue Unterschrift hinzufügen</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="signatureForm" method="post" action="/signature/save">
+                            <input type="hidden" name="protocol_id" value="' . htmlspecialchars($protocolId) . '">
+                            <input type="hidden" name="signature_data" id="signatureData">
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Name *</label>
+                                    <input type="text" class="form-control" name="signer_name" required>
                                 </div>
-                                
-                                <div id="tenantSignature"></div>
-                                <input type="hidden" name="tenant_signature" id="tenantSignatureData">
-                                
-                                <?php if (!empty($protocol['signature_tenant_data'])): ?>
-                                <div class="alert alert-success mt-3">
-                                    <i class="bi bi-check-circle"></i> 
-                                    Bereits unterschrieben am <?= date('d.m.Y H:i', strtotime($protocol['signature_tenant_timestamp'])) ?>
+                                <div class="col-md-6">
+                                    <label class="form-label">Rolle *</label>
+                                    <select class="form-select" name="signer_role" required>
+                                        <option value="">Bitte wählen...</option>
+                                        <option value="tenant">Mieter</option>
+                                        <option value="landlord">Vermieter</option>
+                                        <option value="owner">Eigentümer</option>
+                                        <option value="manager">Hausverwaltung</option>';
+        
+        if ($allowWitness) {
+            $html .= '<option value="witness">Zeuge</option>';
+        }
+        
+        $html .= '</select>
                                 </div>
-                                <?php endif; ?>
                             </div>
-                        </div>
-                        
-                        <!-- Vermieter Unterschrift -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h5 class="mb-0">
-                                    <i class="bi bi-building"></i> Unterschrift Vermieter/Verwalter
-                                </h5>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">E-Mail (optional)</label>
+                                <input type="email" class="form-control" name="signer_email">
                             </div>
-                            <div class="card-body">
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label">Name *</label>
-                                        <input type="text" class="form-control" name="landlord_name" 
-                                               value="<?= htmlspecialchars($payload['landlord']['name'] ?? '') ?>" required>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">E-Mail</label>
-                                        <input type="email" class="form-control" name="landlord_email" 
-                                               value="<?= htmlspecialchars($payload['landlord']['email'] ?? '') ?>">
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Unterschrift *</label>
+                                <div class="signature-pad-wrapper">
+                                    <canvas id="signaturePad" class="signature-pad"></canvas>
+                                    <div class="signature-pad-actions">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="clearSignature">
+                                            <i class="bi bi-arrow-counterclockwise"></i> Löschen
+                                        </button>
                                     </div>
                                 </div>
-                                
-                                <div id="landlordSignature"></div>
-                                <input type="hidden" name="landlord_signature" id="landlordSignatureData">
-                                
-                                <?php if (!empty($protocol['signature_landlord_data'])): ?>
-                                <div class="alert alert-success mt-3">
-                                    <i class="bi bi-check-circle"></i> 
-                                    Bereits unterschrieben am <?= date('d.m.Y H:i', strtotime($protocol['signature_landlord_timestamp'])) ?>
-                                </div>
-                                <?php endif; ?>
+                                <small class="text-muted">Unterschreiben Sie mit der Maus oder dem Finger</small>
                             </div>
-                        </div>
-                        
-                        <!-- Optional: Zeuge -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h5 class="mb-0">
-                                    <i class="bi bi-people"></i> Unterschrift Zeuge (optional)
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="enableWitness">
-                                    <label class="form-check-label" for="enableWitness">
-                                        Zeuge hinzufügen
-                                    </label>
-                                </div>
-                                
-                                <div id="witnessSection" style="display: none;">
-                                    <div class="row mb-3">
-                                        <div class="col-md-6">
-                                            <label class="form-label">Name</label>
-                                            <input type="text" class="form-control" name="witness_name">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">E-Mail</label>
-                                            <input type="email" class="form-control" name="witness_email">
-                                        </div>
-                                    </div>
-                                    
-                                    <div id="witnessSignature"></div>
-                                    <input type="hidden" name="witness_signature" id="witnessSignatureData">
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Rechtliche Hinweise -->
-                        <div class="card mb-4">
-                            <div class="card-body">
-                                <h6 class="card-subtitle mb-2 text-muted">
-                                    <i class="bi bi-shield-check"></i> Rechtliche Hinweise
-                                </h6>
-                                <ul class="small text-muted mb-3">
-                                    <li>Die digitale Unterschrift ist rechtlich bindend gemäß eIDAS-Verordnung (EU) Nr. 910/2014</li>
-                                    <li>Ihre Unterschrift wird verschlüsselt gespeichert und mit einem Zeitstempel versehen</li>
-                                    <li>IP-Adresse und technische Metadaten werden zur Beweissicherung protokolliert</li>
-                                    <li>Die Unterschrift kann nicht nachträglich verändert werden</li>
-                                </ul>
-                                
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="acceptTerms" required>
-                                    <label class="form-check-label" for="acceptTerms">
-                                        Ich bestätige die Richtigkeit der Angaben im Protokoll und akzeptiere die digitale Signatur als rechtsverbindlich. *
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Buttons -->
-                        <div class="d-flex justify-content-between mb-4">
-                            <a href="/protocols" class="btn btn-outline-secondary">
-                                <i class="bi bi-arrow-left"></i> Zurück
-                            </a>
-                            <div>
-                                <button type="button" class="btn btn-outline-primary me-2" onclick="previewSignatures()">
-                                    <i class="bi bi-eye"></i> Vorschau
-                                </button>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-check-lg"></i> Unterschriften speichern
+                            
+                            <div class="d-flex justify-content-between">
+                                <a href="/protocols/edit?id=' . htmlspecialchars($protocolId) . '" class="btn btn-outline-secondary">
+                                    <i class="bi bi-arrow-left me-2"></i>Zurück
+                                </a>
+                                <button type="submit" class="btn btn-primary" id="submitSignature">
+                                    <i class="bi bi-check-circle me-2"></i>Unterschrift speichern
                                 </button>
                             </div>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Bestehende Unterschriften -->
+                ' . $this->renderExistingSignatures($existingSignatures) . '
+                
+                <!-- Rechtlicher Hinweis -->
+                <div class="alert alert-secondary mt-4">
+                    <small>
+                        <i class="bi bi-shield-check me-2"></i>
+                        ' . htmlspecialchars($legalText) . '
+                    </small>
                 </div>
             </div>
         </div>
-        
-        <!-- Modal für Vorschau -->
-        <div class="modal fade" id="previewModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Vorschau der Unterschriften</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body" id="previewContent"></div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Schließen</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- JavaScript -->
-        <script src="/js/signature-module.js"></script>
-        <script>
-            // Initialisiere Signature Pads
-            let tenantSig = new SignatureModule('tenantSignature', {
-                width: 600,
-                height: 150
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const canvas = document.getElementById("signaturePad");
+            const signaturePad = new SignaturePad(canvas, {
+                backgroundColor: "rgb(255, 255, 255)"
             });
             
-            let landlordSig = new SignatureModule('landlordSignature', {
-                width: 600,
-                height: 150
-            });
+            // Canvas Größe anpassen
+            function resizeCanvas() {
+                const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                canvas.width = canvas.offsetWidth * ratio;
+                canvas.height = canvas.offsetHeight * ratio;
+                canvas.getContext("2d").scale(ratio, ratio);
+                signaturePad.clear();
+            }
             
-            let witnessSig = null;
+            window.addEventListener("resize", resizeCanvas);
+            resizeCanvas();
             
-            // Zeuge aktivieren/deaktivieren
-            document.getElementById('enableWitness').addEventListener('change', function(e) {
-                const witnessSection = document.getElementById('witnessSection');
-                if (e.target.checked) {
-                    witnessSection.style.display = 'block';
-                    if (!witnessSig) {
-                        witnessSig = new SignatureModule('witnessSignature', {
-                            width: 600,
-                            height: 150
-                        });
-                    }
-                } else {
-                    witnessSection.style.display = 'none';
-                }
+            // Clear Button
+            document.getElementById("clearSignature").addEventListener("click", function() {
+                signaturePad.clear();
             });
             
             // Form Submit
-            document.getElementById('signatureForm').addEventListener('submit', function(e) {
+            document.getElementById("signatureForm").addEventListener("submit", function(e) {
                 e.preventDefault();
                 
-                // Validierung
-                const tenantValid = tenantSig.validateSignature();
-                const landlordValid = landlordSig.validateSignature();
-                
-                if (!tenantValid.valid) {
-                    alert('Mieter: ' + tenantValid.message);
-                    return;
+                if (signaturePad.isEmpty()) {
+                    alert("Bitte unterschreiben Sie im vorgesehenen Feld.");
+                    return false;
                 }
                 
-                if (!landlordValid.valid) {
-                    alert('Vermieter: ' + landlordValid.message);
-                    return;
-                }
-                
-                // Signatur-Daten sammeln
-                document.getElementById('tenantSignatureData').value = JSON.stringify(tenantSig.getSignatureData());
-                document.getElementById('landlordSignatureData').value = JSON.stringify(landlordSig.getSignatureData());
-                
-                if (witnessSig && !witnessSig.isEmpty()) {
-                    document.getElementById('witnessSignatureData').value = JSON.stringify(witnessSig.getSignatureData());
-                }
+                // Signatur als Data URL speichern
+                document.getElementById("signatureData").value = signaturePad.toDataURL();
                 
                 // Formular absenden
                 this.submit();
             });
-            
-            // Vorschau
-            function previewSignatures() {
-                const modal = new bootstrap.Modal(document.getElementById('previewModal'));
-                const content = document.getElementById('previewContent');
-                
-                let html = '<div class="row">';
-                
-                // Mieter
-                if (!tenantSig.isEmpty()) {
-                    html += '<div class="col-md-6 mb-3">';
-                    html += '<h6>Mieter: ' + document.querySelector('[name="tenant_name"]').value + '</h6>';
-                    html += '<img src="' + tenantSig.getSignatureData().dataUrl + '" class="img-fluid border">';
-                    html += '</div>';
-                }
-                
-                // Vermieter
-                if (!landlordSig.isEmpty()) {
-                    html += '<div class="col-md-6 mb-3">';
-                    html += '<h6>Vermieter: ' + document.querySelector('[name="landlord_name"]').value + '</h6>';
-                    html += '<img src="' + landlordSig.getSignatureData().dataUrl + '" class="img-fluid border">';
-                    html += '</div>';
-                }
-                
-                // Zeuge
-                if (witnessSig && !witnessSig.isEmpty()) {
-                    html += '<div class="col-md-6 mb-3">';
-                    html += '<h6>Zeuge: ' + document.querySelector('[name="witness_name"]').value + '</h6>';
-                    html += '<img src="' + witnessSig.getSignatureData().dataUrl + '" class="img-fluid border">';
-                    html += '</div>';
-                }
-                
-                html += '</div>';
-                content.innerHTML = html;
-                modal.show();
-            }
-        </script>
+        });
+    </script>
+</body>
+</html>';
         
-        <?php
-        $content = ob_get_clean();
-        View::render('Digitale Unterschriften', $content);
+        echo $html;
+        exit;
     }
     
     /**
-     * Speichert die digitalen Signaturen
+     * Rendert bestehende Unterschriften
+     */
+    private function renderExistingSignatures(array $signatures): string
+    {
+        if (empty($signatures)) {
+            return '';
+        }
+        
+        $html = '<div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Vorhandene Unterschriften (' . count($signatures) . ')</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Rolle</th>
+                                <th>Datum</th>
+                                <th>Unterschrift</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>';
+        
+        foreach ($signatures as $sig) {
+            $roleLabel = match($sig['signer_role'] ?? '') {
+                'tenant' => 'Mieter',
+                'landlord' => 'Vermieter',
+                'owner' => 'Eigentümer',
+                'manager' => 'Hausverwaltung',
+                'witness' => 'Zeuge',
+                default => $sig['signer_role'] ?? 'Unbekannt'
+            };
+            
+            $statusBadge = $sig['is_valid'] ? 
+                '<span class="badge bg-success">Gültig</span>' : 
+                '<span class="badge bg-warning">Ungültig</span>';
+            
+            $html .= '<tr>
+                <td>' . htmlspecialchars($sig['signer_name'] ?? '') . '</td>
+                <td>' . htmlspecialchars($roleLabel) . '</td>
+                <td>' . date('d.m.Y H:i', strtotime($sig['created_at'])) . '</td>
+                <td>';
+            
+            if (!empty($sig['signature_data'])) {
+                $html .= '<img src="' . htmlspecialchars($sig['signature_data']) . '" class="signature-preview">';
+            } else {
+                $html .= '<span class="text-muted">Keine Vorschau</span>';
+            }
+            
+            $html .= '</td>
+                <td>' . $statusBadge . '</td>
+            </tr>';
+        }
+        
+        $html .= '</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>';
+        
+        return $html;
+    }
+    
+    /**
+     * Speichert eine digitale Unterschrift
      */
     public function save(): void
     {
         Auth::requireAuth();
+        $user = Auth::user();
         
         $protocolId = $_POST['protocol_id'] ?? '';
-        if (!$protocolId) {
-            Flash::add('error', 'Kein Protokoll angegeben.');
-            header('Location: /protocols');
-            exit;
+        $signatureData = $_POST['signature_data'] ?? '';
+        $signerName = $_POST['signer_name'] ?? '';
+        $signerRole = $_POST['signer_role'] ?? '';
+        $signerEmail = $_POST['signer_email'] ?? '';
+        
+        if (empty($protocolId) || empty($signatureData) || empty($signerName) || empty($signerRole)) {
+            Flash::add('error', 'Pflichtfelder fehlen.');
+            header('Location: /protocols/edit?id=' . $protocolId);
+            return;
         }
-        
-        $pdo = Database::pdo();
-        
-        // Signatur-Daten verarbeiten
-        $tenantSig = json_decode($_POST['tenant_signature'] ?? '{}', true);
-        $landlordSig = json_decode($_POST['landlord_signature'] ?? '{}', true);
-        $witnessSig = json_decode($_POST['witness_signature'] ?? '{}', true);
-        
-        // IP und User Agent für Audit
-        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
-        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
         
         try {
-            $pdo->beginTransaction();
+            $pdo = Database::pdo();
             
-            // Update Protocol mit Signaturen
-            $stmt = $pdo->prepare('
-                UPDATE protocols SET 
-                    signature_tenant_data = ?,
-                    signature_tenant_metadata = ?,
-                    signature_tenant_timestamp = NOW(),
-                    signature_landlord_data = ?,
-                    signature_landlord_metadata = ?,
-                    signature_landlord_timestamp = NOW(),
-                    signature_witness_data = ?,
-                    signature_witness_metadata = ?,
-                    signature_witness_timestamp = IF(? IS NOT NULL, NOW(), NULL),
-                    updated_at = NOW()
-                WHERE id = ?
-            ');
+            // Prüfe ob Tabelle existiert, wenn nicht erstelle sie
+            $this->ensureSignatureTableExists($pdo);
+            
+            // UUID generieren
+            $uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000,
+                mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            );
+            
+            // IP-Adresse und User-Agent für Audit
+            $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
+            
+            // Signatur speichern
+            $stmt = $pdo->prepare("
+                INSERT INTO protocol_signatures (
+                    id, protocol_id, signer_name, signer_role, signer_email,
+                    signature_data, signature_hash, ip_address, user_agent,
+                    created_by, created_at, is_valid
+                ) VALUES (
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, NOW(), 1
+                )
+            ");
+            
+            $signatureHash = hash('sha256', $signatureData . $signerName . time());
             
             $stmt->execute([
-                $tenantSig['dataUrl'] ?? null,
-                json_encode(array_merge($tenantSig['metadata'] ?? [], [
-                    'name' => $_POST['tenant_name'] ?? '',
-                    'email' => $_POST['tenant_email'] ?? '',
-                    'ip' => $ipAddress,
-                    'userAgent' => $userAgent
-                ])),
-                $landlordSig['dataUrl'] ?? null,
-                json_encode(array_merge($landlordSig['metadata'] ?? [], [
-                    'name' => $_POST['landlord_name'] ?? '',
-                    'email' => $_POST['landlord_email'] ?? '',
-                    'ip' => $ipAddress,
-                    'userAgent' => $userAgent
-                ])),
-                $witnessSig['dataUrl'] ?? null,
-                $witnessSig ? json_encode(array_merge($witnessSig['metadata'] ?? [], [
-                    'name' => $_POST['witness_name'] ?? '',
-                    'email' => $_POST['witness_email'] ?? '',
-                    'ip' => $ipAddress,
-                    'userAgent' => $userAgent
-                ])) : null,
-                $witnessSig['dataUrl'] ?? null,
-                $protocolId
+                $uuid,
+                $protocolId,
+                $signerName,
+                $signerRole,
+                $signerEmail ?: null,
+                $signatureData,
+                $signatureHash,
+                $ipAddress,
+                $userAgent,
+                $user['email'] ?? 'system'
             ]);
             
-            // Signatur-Historie speichern (für Audit-Trail)
-            if (!empty($tenantSig['dataUrl'])) {
-                $this->saveSignatureHistory($pdo, $protocolId, 'tenant', $_POST['tenant_name'] ?? '', 
-                    $_POST['tenant_email'] ?? '', $tenantSig, $ipAddress, $userAgent);
+            // Event loggen
+            if (class_exists('\\App\\EventLogger')) {
+                \App\EventLogger::logProtocolEvent(
+                    $protocolId,
+                    'signed',
+                    "Digitale Unterschrift hinzugefügt von $signerName ($signerRole)",
+                    $user['email'] ?? 'system'
+                );
             }
             
-            if (!empty($landlordSig['dataUrl'])) {
-                $this->saveSignatureHistory($pdo, $protocolId, 'landlord', $_POST['landlord_name'] ?? '', 
-                    $_POST['landlord_email'] ?? '', $landlordSig, $ipAddress, $userAgent);
+            // E-Mail senden wenn aktiviert
+            if (Settings::get('signature_send_emails', 'true') === 'true' && !empty($signerEmail)) {
+                $this->sendSignatureConfirmation($protocolId, $signerEmail, $signerName);
             }
             
-            if (!empty($witnessSig['dataUrl'])) {
-                $this->saveSignatureHistory($pdo, $protocolId, 'witness', $_POST['witness_name'] ?? '', 
-                    $_POST['witness_email'] ?? '', $witnessSig, $ipAddress, $userAgent);
+            Flash::add('success', 'Unterschrift erfolgreich gespeichert.');
+            
+            // Zurück zum Protokoll oder zur Signatur-Seite
+            if (Settings::get('signature_require_all', 'false') === 'true') {
+                header('Location: /signature/sign?protocol_id=' . $protocolId);
+            } else {
+                header('Location: /protocols/edit?id=' . $protocolId . '#tab-signatures');
             }
-            
-            $pdo->commit();
-            
-            // Audit Log
-            if (class_exists('App\\AuditLogger')) {
-                AuditLogger::log('protocol_signatures', $protocolId, 'sign', [
-                    'tenant' => $_POST['tenant_name'] ?? '',
-                    'landlord' => $_POST['landlord_name'] ?? '',
-                    'witness' => $_POST['witness_name'] ?? ''
-                ]);
-            }
-            
-            Flash::add('success', 'Digitale Unterschriften wurden erfolgreich gespeichert.');
-            header('Location: /protocols/view?id=' . $protocolId);
             
         } catch (\Exception $e) {
-            $pdo->rollBack();
-            Flash::add('error', 'Fehler beim Speichern der Unterschriften: ' . $e->getMessage());
-            header('Location: /signature/sign?protocol_id=' . $protocolId);
+            Flash::add('error', 'Fehler beim Speichern der Unterschrift: ' . $e->getMessage());
+            header('Location: /protocols/edit?id=' . $protocolId);
+        }
+    }
+    
+    /**
+     * Stellt sicher dass die Signatur-Tabelle existiert
+     */
+    private function ensureSignatureTableExists(PDO $pdo): void
+    {
+        try {
+            $pdo->query("SELECT 1 FROM protocol_signatures LIMIT 1");
+        } catch (\PDOException $e) {
+            // Tabelle existiert nicht, erstelle sie
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS protocol_signatures (
+                    id VARCHAR(36) PRIMARY KEY,
+                    protocol_id VARCHAR(36) NOT NULL,
+                    signer_name VARCHAR(255) NOT NULL,
+                    signer_role VARCHAR(50) NOT NULL,
+                    signer_email VARCHAR(255),
+                    signature_data LONGTEXT,
+                    signature_hash VARCHAR(64),
+                    ip_address VARCHAR(45),
+                    user_agent TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_valid BOOLEAN DEFAULT TRUE,
+                    INDEX idx_protocol_id (protocol_id),
+                    INDEX idx_signer_role (signer_role),
+                    INDEX idx_created_at (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        }
+    }
+    
+    /**
+     * Sendet eine Bestätigungs-E-Mail nach der Unterschrift
+     */
+    private function sendSignatureConfirmation(string $protocolId, string $email, string $name): void
+    {
+        // TODO: E-Mail-Versand implementieren
+        // Vorerst nur Logging
+        error_log("Signature confirmation email would be sent to $email for $name (Protocol: $protocolId)");
+    }
+    
+    /**
+     * Weiterleitung zu DocuSign für externe Signatur
+     */
+    private function redirectToDocuSign(string $protocolId): void
+    {
+        // DocuSign Integration
+        $baseUrl = Settings::get('docusign_base_url', '');
+        $accountId = Settings::get('docusign_account_id', '');
+        $integrationKey = Settings::get('docusign_integration_key', '');
+        
+        if (empty($baseUrl) || empty($accountId) || empty($integrationKey)) {
+            Flash::add('error', 'DocuSign ist nicht konfiguriert. Bitte prüfen Sie die Einstellungen.');
+            header('Location: /settings/signatures');
+            return;
         }
         
+        // TODO: DocuSign OAuth und Envelope-Erstellung implementieren
+        Flash::add('info', 'DocuSign-Integration wird vorbereitet...');
+        header('Location: /protocols/edit?id=' . $protocolId);
+    }
+    
+    /**
+     * Test-Seite für Signatur-Funktionalität
+     */
+    public function test(): void
+    {
+        Auth::requireAuth();
+        
+        $provider = Settings::get('signature_provider', 'local');
+        
+        $html = '<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signatur-Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Signatur-Test</h1>
+        <div class="alert alert-info">
+            <strong>Aktiver Provider:</strong> ' . strtoupper($provider) . '
+        </div>
+        
+        <div class="card">
+            <div class="card-body">
+                <h5>Test-Funktionen</h5>
+                <p>Provider: ' . htmlspecialchars($provider) . '</p>
+                <p>Status: ';
+        
+        if ($provider === 'local') {
+            $html .= '<span class="badge bg-success">Bereit</span>';
+        } else {
+            $html .= '<span class="badge bg-warning">DocuSign-Konfiguration prüfen</span>';
+        }
+        
+        $html .= '</p>
+                <a href="/settings/signatures" class="btn btn-primary">Zurück zu den Einstellungen</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>';
+        
+        echo $html;
         exit;
     }
     
     /**
-     * Speichert Signatur in Historie-Tabelle
-     */
-    private function saveSignatureHistory(PDO $pdo, string $protocolId, string $signerType, 
-        string $name, string $email, array $signatureData, string $ip, string $userAgent): void
-    {
-        $stmt = $pdo->prepare('
-            INSERT INTO protocol_signatures 
-            (protocol_id, signer_type, signer_name, signer_email, signature_data, 
-             signature_hash, metadata, ip_address, user_agent)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ');
-        
-        $stmt->execute([
-            $protocolId,
-            $signerType,
-            $name,
-            $email ?: null,
-            $signatureData['dataUrl'] ?? '',
-            $signatureData['hash'] ?? '',
-            json_encode($signatureData['metadata'] ?? []),
-            $ip,
-            $userAgent
-        ]);
-    }
-    
-    /**
-     * Verifiziert eine Signatur
+     * Verifiziert eine digitale Unterschrift
      */
     public function verify(): void
     {
-        $protocolId = $_GET['protocol_id'] ?? '';
-        if (!$protocolId) {
-            echo json_encode(['valid' => false, 'message' => 'Kein Protokoll angegeben']);
-            exit;
+        Auth::requireAuth();
+        
+        $signatureId = $_GET['signature_id'] ?? '';
+        
+        if (empty($signatureId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Signature ID required']);
+            return;
         }
         
-        $pdo = Database::pdo();
-        $stmt = $pdo->prepare('
-            SELECT signature_tenant_data, signature_tenant_metadata, signature_tenant_timestamp,
-                   signature_landlord_data, signature_landlord_metadata, signature_landlord_timestamp,
-                   signature_witness_data, signature_witness_metadata, signature_witness_timestamp
-            FROM protocols 
-            WHERE id = ? AND deleted_at IS NULL
-        ');
-        $stmt->execute([$protocolId]);
-        $protocol = $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            $pdo = Database::pdo();
+            
+            // Signatur-Details laden
+            $stmt = $pdo->prepare("
+                SELECT * FROM protocol_signatures 
+                WHERE id = ?
+            ");
+            $stmt->execute([$signatureId]);
+            $signature = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$signature) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Signature not found']);
+                return;
+            }
+            
+            // Verifikation durchführen
+            $isValid = $this->verifySignatureHash(
+                $signature['signature_data'],
+                $signature['signer_name'],
+                $signature['signature_hash'],
+                $signature['created_at']
+            );
+            
+            // Antwort senden
+            header('Content-Type: application/json');
+            echo json_encode([
+                'valid' => $isValid,
+                'signature' => [
+                    'id' => $signature['id'],
+                    'signer_name' => $signature['signer_name'],
+                    'signer_role' => $signature['signer_role'],
+                    'created_at' => $signature['created_at'],
+                    'ip_address' => $signature['ip_address']
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Verification failed: ' . $e->getMessage()]);
+        }
+    }
+    
+    /**
+     * Überprüft den Hash einer Signatur
+     */
+    private function verifySignatureHash(string $signatureData, string $signerName, string $storedHash, string $createdAt): bool
+    {
+        // Zeitstempel aus created_at extrahieren
+        $timestamp = strtotime($createdAt);
         
-        if (!$protocol) {
-            echo json_encode(['valid' => false, 'message' => 'Protokoll nicht gefunden']);
-            exit;
+        // Hash mit verschiedenen Zeitstempel-Variationen prüfen
+        // (da der exakte Zeitstempel möglicherweise leicht abweicht)
+        for ($i = -2; $i <= 2; $i++) {
+            $testTime = $timestamp + $i;
+            $testHash = hash('sha256', $signatureData . $signerName . $testTime);
+            
+            if ($testHash === $storedHash) {
+                return true;
+            }
         }
         
-        $signatures = [];
-        
-        if ($protocol['signature_tenant_data']) {
-            $signatures['tenant'] = [
-                'signed' => true,
-                'timestamp' => $protocol['signature_tenant_timestamp'],
-                'metadata' => json_decode($protocol['signature_tenant_metadata'], true)
-            ];
-        }
-        
-        if ($protocol['signature_landlord_data']) {
-            $signatures['landlord'] = [
-                'signed' => true,
-                'timestamp' => $protocol['signature_landlord_timestamp'],
-                'metadata' => json_decode($protocol['signature_landlord_metadata'], true)
-            ];
-        }
-        
-        if ($protocol['signature_witness_data']) {
-            $signatures['witness'] = [
-                'signed' => true,
-                'timestamp' => $protocol['signature_witness_timestamp'],
-                'metadata' => json_decode($protocol['signature_witness_metadata'], true)
-            ];
-        }
-        
-        echo json_encode([
-            'valid' => true,
-            'signatures' => $signatures,
-            'message' => 'Signaturen verifiziert'
-        ]);
-        exit;
+        return false;
     }
 }

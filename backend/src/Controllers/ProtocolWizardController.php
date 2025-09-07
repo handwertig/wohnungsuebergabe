@@ -12,6 +12,107 @@ use PDO;
 final class ProtocolWizardController
 {
     private function h($v){ return htmlspecialchars((string)$v, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
+    
+    /**
+     * Generiert das Signatur-Modal HTML
+     */
+    private function getSignatureModal(): string
+    {
+        return '
+        <!-- Signature Modal -->
+        <div class="modal fade" id="signatureModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Unterschrift erfassen</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="text-center mb-3">
+                            <canvas id="signatureCanvas" 
+                                    style="border: 2px solid #dee2e6; border-radius: 4px; cursor: crosshair; width: 100%; max-width: 700px;"
+                                    width="700" height="200">
+                            </canvas>
+                        </div>
+                        <div class="text-muted small text-center">
+                            <i class="bi bi-info-circle"></i> Bitte unterschreiben Sie mit der Maus oder dem Finger im Feld oben
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" id="clearSignature">
+                            <i class="bi bi-eraser"></i> Löschen
+                        </button>
+                        <button type="button" class="btn btn-primary" id="saveModalSignature">
+                            <i class="bi bi-check-lg"></i> Unterschrift speichern
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Signature Pad Integration -->
+        <script src="/assets/signature-pad.js"></script>
+        <script>
+        let signaturePad = null;
+        let currentTarget = null;
+        
+        function openSignatureDialog(target) {
+            currentTarget = target;
+            const modal = new bootstrap.Modal(document.getElementById("signatureModal"));
+            modal.show();
+            
+            // Initialize signature pad if not already done
+            if (!signaturePad) {
+                signaturePad = new SignaturePad("signatureCanvas", {
+                    strokeStyle: "#000033",
+                    lineWidth: 2
+                });
+                
+                // Clear button
+                document.getElementById("clearSignature").addEventListener("click", function() {
+                    signaturePad.clear();
+                });
+                
+                // Save button
+                document.getElementById("saveModalSignature").addEventListener("click", function() {
+                    if (signaturePad.isEmpty()) {
+                        alert("Bitte unterschreiben Sie zuerst.");
+                        return;
+                    }
+                    
+                    const dataURL = signaturePad.toDataURL();
+                    
+                    // Save to hidden field
+                    document.getElementById("signature_" + currentTarget).value = dataURL;
+                    
+                    // Update preview
+                    const previewContainer = document.querySelector("#signature_" + currentTarget).closest(".card").querySelector(".text-muted.mb-3, img");
+                    if (previewContainer) {
+                        const imgHtml = \'<img src="\' + dataURL + \'" class="img-fluid mb-2" style="max-height: 60px;">\' +
+                                       \'<p class="small text-muted mb-2">Unterzeichnet</p>\';
+                        previewContainer.parentElement.innerHTML = imgHtml + 
+                            \'<button type="button" class="btn btn-sm btn-outline-primary" onclick="openSignatureDialog(\\\'\'+ currentTarget + \'\\\')">\'  +
+                            \'<i class="bi bi-pen me-1"></i>Ändern</button>\';
+                    }
+                    
+                    // Update button text
+                    const button = document.querySelector("button[onclick=\"openSignatureDialog(\'" + currentTarget + "\')\"]" );
+                    if (button) {
+                        button.innerHTML = \'<i class="bi bi-pen me-1"></i>Ändern\';
+                    }
+                    
+                    // Close modal
+                    bootstrap.Modal.getInstance(document.getElementById("signatureModal")).hide();
+                    signaturePad.clear();
+                });
+            }
+            
+            // Clear pad for new signature
+            signaturePad.clear();
+        }
+        </script>
+        ';
+    }
 
     public function start(): void
     {
@@ -212,12 +313,111 @@ final class ProtocolWizardController
             // Marketing
             $html .= '<div class="mb-2"><div class="small fw-semibold mb-1">E‑Mail‑Marketing (v'.(int)($rtM['version']??0).')</div><div class="border p-2 small">'.$rtM['content'].'</div><div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="meta[consents][marketing]" '.(!empty($cons['marketing'])?'checked':'').'> <label class="form-check-label">Ich willige ein.</label></div></div>';
 
-            // DocuSign‑Platzhalter
-            $html .= '<h2 class="h6 mt-3">Unterschriften (DocuSign)</h2><div class="row g-3 small">';
-            $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Mieter</div><div class="text-muted">Platzhalter für DocuSign‑Signatur</div></div></div>';
-            $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Eigentümer</div><div class="text-muted">Platzhalter für DocuSign‑Signatur</div></div></div>';
-            $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Dritte Person</div><div class="text-muted">Platzhalter (optional)</div></div></div>';
-            $html .= '</div>';
+            // Digitale Unterschriften (Open Source oder DocuSign)
+            $signatures = (array)($data['signatures'] ?? []);
+            $signatureProvider = \App\Settings::get('signature_provider', 'local');
+            
+            $html .= '<h2 class="h6 mt-3">Digitale Unterschriften</h2>';
+            
+            if ($signatureProvider === 'local') {
+                // Lokale Signatur-Integration
+                $html .= '<div class="alert alert-info small">';
+                $html .= '<i class="bi bi-info-circle me-2"></i>';
+                $html .= 'Die digitalen Unterschriften können nach dem Speichern des Protokolls hinzugefügt werden. ';
+                $html .= 'Sie erfüllen die Anforderungen gemäß §126a BGB und sind für Wohnungsübergabeprotokolle rechtlich ausreichend.';
+                $html .= '</div>';
+                
+                $html .= '<div class="row g-3">';
+                
+                // Mieter Unterschrift
+                $html .= '<div class="col-md-4">';
+                $html .= '<div class="card">';
+                $html .= '<div class="card-body text-center">';
+                $html .= '<h6 class="card-title">Mieter</h6>';
+                if (!empty($signatures['tenant'])) {
+                    $html .= '<img src="' . $this->h($signatures['tenant']) . '" class="img-fluid mb-2" style="max-height: 60px;">';
+                    $html .= '<p class="small text-muted mb-2">Unterzeichnet</p>';
+                } else {
+                    $html .= '<div class="text-muted mb-3" style="height: 60px; display: flex; align-items: center; justify-content: center;">';
+                    $html .= '<i class="bi bi-pen" style="font-size: 2rem;"></i>';
+                    $html .= '</div>';
+                }
+                $html .= '<button type="button" class="btn btn-sm btn-outline-primary" onclick="openSignatureDialog(\'tenant\')">';
+                $html .= '<i class="bi bi-pen me-1"></i>' . (empty($signatures['tenant']) ? 'Unterschrift hinzufügen' : 'Ändern');
+                $html .= '</button>';
+                $html .= '<input type="hidden" name="signatures[tenant]" id="signature_tenant" value="' . $this->h($signatures['tenant'] ?? '') . '">';
+                $html .= '<div class="mt-2">';
+                $html .= '<input type="text" class="form-control form-control-sm" name="signatures[tenant_name]" placeholder="Name des Mieters" value="' . $this->h($signatures['tenant_name'] ?? '') . '">';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                
+                // Eigentümer/Vermieter Unterschrift
+                $html .= '<div class="col-md-4">';
+                $html .= '<div class="card">';
+                $html .= '<div class="card-body text-center">';
+                $html .= '<h6 class="card-title">Eigentümer/Vermieter</h6>';
+                if (!empty($signatures['landlord'])) {
+                    $html .= '<img src="' . $this->h($signatures['landlord']) . '" class="img-fluid mb-2" style="max-height: 60px;">';
+                    $html .= '<p class="small text-muted mb-2">Unterzeichnet</p>';
+                } else {
+                    $html .= '<div class="text-muted mb-3" style="height: 60px; display: flex; align-items: center; justify-content: center;">';
+                    $html .= '<i class="bi bi-pen" style="font-size: 2rem;"></i>';
+                    $html .= '</div>';
+                }
+                $html .= '<button type="button" class="btn btn-sm btn-outline-primary" onclick="openSignatureDialog(\'landlord\')">';
+                $html .= '<i class="bi bi-pen me-1"></i>' . (empty($signatures['landlord']) ? 'Unterschrift hinzufügen' : 'Ändern');
+                $html .= '</button>';
+                $html .= '<input type="hidden" name="signatures[landlord]" id="signature_landlord" value="' . $this->h($signatures['landlord'] ?? '') . '">';
+                $html .= '<div class="mt-2">';
+                $html .= '<input type="text" class="form-control form-control-sm" name="signatures[landlord_name]" placeholder="Name des Vermieters" value="' . $this->h($signatures['landlord_name'] ?? '') . '">';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                
+                // Dritte Person (optional)
+                $html .= '<div class="col-md-4">';
+                $html .= '<div class="card">';
+                $html .= '<div class="card-body text-center">';
+                $html .= '<h6 class="card-title">Dritte Person (optional)</h6>';
+                if (!empty($signatures['witness'])) {
+                    $html .= '<img src="' . $this->h($signatures['witness']) . '" class="img-fluid mb-2" style="max-height: 60px;">';
+                    $html .= '<p class="small text-muted mb-2">Unterzeichnet</p>';
+                } else {
+                    $html .= '<div class="text-muted mb-3" style="height: 60px; display: flex; align-items: center; justify-content: center;">';
+                    $html .= '<i class="bi bi-pen" style="font-size: 2rem;"></i>';
+                    $html .= '</div>';
+                }
+                $html .= '<button type="button" class="btn btn-sm btn-outline-primary" onclick="openSignatureDialog(\'witness\')">';
+                $html .= '<i class="bi bi-pen me-1"></i>' . (empty($signatures['witness']) ? 'Unterschrift hinzufügen' : 'Ändern');
+                $html .= '</button>';
+                $html .= '<input type="hidden" name="signatures[witness]" id="signature_witness" value="' . $this->h($signatures['witness'] ?? '') . '">';
+                $html .= '<div class="mt-2">';
+                $html .= '<input type="text" class="form-control form-control-sm" name="signatures[witness_name]" placeholder="Name der dritten Person" value="' . $this->h($signatures['witness_name'] ?? '') . '">';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                
+                $html .= '</div>';
+                
+                // Signature Modal
+                $html .= $this->getSignatureModal();
+                
+            } else {
+                // DocuSign Integration (Platzhalter)
+                $html .= '<div class="alert alert-warning small">';
+                $html .= '<i class="bi bi-exclamation-triangle me-2"></i>';
+                $html .= 'DocuSign ist als Provider ausgewählt. Die Unterschriften werden nach dem Speichern über DocuSign erfasst.';
+                $html .= '</div>';
+                $html .= '<div class="row g-3 small">';
+                $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Mieter</div><div class="text-muted">Wird über DocuSign erfasst</div></div></div>';
+                $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Eigentümer</div><div class="text-muted">Wird über DocuSign erfasst</div></div></div>';
+                $html .= '<div class="col-md-4"><div class="border p-3" style="height:90px"><div class="fw-semibold">Dritte Person</div><div class="text-muted">Optional über DocuSign</div></div></div>';
+                $html .= '</div>';
+            }
 
             $html .= '<div class="d-flex justify-content-between mt-3"><a class="btn btn-ghost" href="/protocols/wizard?step=3&draft='.$this->h($draft).'"><i class="bi bi-arrow-left"></i> Zurück</a><button class="btn btn-primary btn-lg">Weiter</button></div>';
         }
@@ -307,6 +507,20 @@ final class ProtocolWizardController
                 foreach ($_POST['keys'] as $k) { $keys[]=['label'=>trim((string)($k['label'] ?? '')),'qty'=>(int)($k['qty'] ?? 0),'no'=>trim((string)($k['no'] ?? ''))]; }
             }
             $meta=(array)($_POST['meta'] ?? []);
+            
+            // Signaturen speichern
+            $signatures = (array)($_POST['signatures'] ?? []);
+            $data['signatures'] = [
+                'tenant' => (string)($signatures['tenant'] ?? ''),
+                'tenant_name' => (string)($signatures['tenant_name'] ?? ''),
+                'landlord' => (string)($signatures['landlord'] ?? ''),
+                'landlord_name' => (string)($signatures['landlord_name'] ?? ''),
+                'witness' => (string)($signatures['witness'] ?? ''),
+                'witness_name' => (string)($signatures['witness_name'] ?? ''),
+                'timestamp' => date('Y-m-d H:i:s'),
+                'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+            ];
+            
             $data['keys']=$keys;
             $data['meta']=[
                 'notes'=>(string)($meta['notes'] ?? ''),
@@ -355,7 +569,47 @@ final class ProtocolWizardController
           <dt class="col-sm-3">Mieter</dt><dd class="col-sm-9"><?= htmlspecialchars((string)($d['tenant_name'] ?? '')) ?></dd>
           <dt class="col-sm-3">Zeitstempel</dt><dd class="col-sm-9"><?= htmlspecialchars((string)($data['timestamp'] ?? '')) ?></dd>
         </dl>
-        <form method="post" action="/protocols/wizard/finish?draft=<?= htmlspecialchars($draft) ?>">
+        
+        <?php if (!empty($data['signatures'])): ?>
+        <h2 class="h6 mt-3">Unterschriften</h2>
+        <div class="row g-2">
+          <?php if (!empty($data['signatures']['tenant'])): ?>
+          <div class="col-md-4">
+            <div class="card">
+              <div class="card-body text-center">
+                <h6 class="card-title">Mieter</h6>
+                <img src="<?= htmlspecialchars($data['signatures']['tenant']) ?>" class="img-fluid" style="max-height: 60px;">
+                <p class="small text-muted mb-0"><?= htmlspecialchars($data['signatures']['tenant_name'] ?? '') ?></p>
+              </div>
+            </div>
+          </div>
+          <?php endif; ?>
+          <?php if (!empty($data['signatures']['landlord'])): ?>
+          <div class="col-md-4">
+            <div class="card">
+              <div class="card-body text-center">
+                <h6 class="card-title">Eigentümer/Vermieter</h6>
+                <img src="<?= htmlspecialchars($data['signatures']['landlord']) ?>" class="img-fluid" style="max-height: 60px;">
+                <p class="small text-muted mb-0"><?= htmlspecialchars($data['signatures']['landlord_name'] ?? '') ?></p>
+              </div>
+            </div>
+          </div>
+          <?php endif; ?>
+          <?php if (!empty($data['signatures']['witness'])): ?>
+          <div class="col-md-4">
+            <div class="card">
+              <div class="card-body text-center">
+                <h6 class="card-title">Dritte Person</h6>
+                <img src="<?= htmlspecialchars($data['signatures']['witness']) ?>" class="img-fluid" style="max-height: 60px;">
+                <p class="small text-muted mb-0"><?= htmlspecialchars($data['signatures']['witness_name'] ?? '') ?></p>
+              </div>
+            </div>
+          </div>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
+        
+        <form method="post" action="/protocols/wizard/finish?draft=<?= htmlspecialchars($draft) ?>" class="mt-3">
           <button class="btn btn-success btn-lg">Abschließen & Speichern</button>
           <a class="btn btn-ghost" href="/protocols/wizard?step=4&draft=<?= htmlspecialchars($draft) ?>">Zurück</a>
         </form>
@@ -382,11 +636,126 @@ final class ProtocolWizardController
             ->execute([$pid,(string)$d['unit_id'],(string)$d['type'],(string)($d['tenant_name'] ?? ''), json_encode($data, JSON_UNESCAPED_UNICODE), ($d['owner_id'] ?? null), ($d['manager_id'] ?? null)]);
         $pdo->prepare("INSERT INTO protocol_versions (id,protocol_id,version_no,data,created_by,created_at) VALUES (UUID(),?,?,?,?,NOW())")
             ->execute([$pid,1,json_encode($data, JSON_UNESCAPED_UNICODE),(string)(\App\Auth::user()['email'] ?? 'system')]);
+        
+        // Signaturen in separate Tabelle speichern wenn vorhanden
+        if (!empty($data['signatures'])) {
+            $this->saveSignaturesToDatabase($pdo, $pid, $data['signatures']);
+        }
 
         try { $pdo->prepare("UPDATE protocol_files SET protocol_id=?, draft_id=NULL WHERE draft_id=?")->execute([$pid,$draft]); } catch (\Throwable $e) {}
         $pdo->prepare("UPDATE protocol_drafts SET status='finished', updated_at=NOW() WHERE id=?")->execute([$draft]);
 
         Flash::add('success','Protokoll gespeichert (v1).');
         header('Location:/protocols/edit?id='.$pid);
+    }
+    
+    /**
+     * Speichert Signaturen in die protocol_signatures Tabelle
+     */
+    private function saveSignaturesToDatabase(PDO $pdo, string $protocolId, array $signatures): void
+    {
+        // Stelle sicher dass die Tabelle existiert
+        try {
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS protocol_signatures (
+                    id VARCHAR(36) PRIMARY KEY,
+                    protocol_id VARCHAR(36) NOT NULL,
+                    signer_name VARCHAR(255) NOT NULL,
+                    signer_role VARCHAR(50) NOT NULL,
+                    signer_email VARCHAR(255),
+                    signature_data LONGTEXT,
+                    signature_hash VARCHAR(64),
+                    ip_address VARCHAR(45),
+                    user_agent TEXT,
+                    created_by VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_valid BOOLEAN DEFAULT TRUE,
+                    INDEX idx_protocol_id (protocol_id),
+                    INDEX idx_signer_role (signer_role),
+                    INDEX idx_created_at (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        } catch (\PDOException $e) {
+            // Tabelle existiert vermutlich schon
+        }
+        
+        $user = \App\Auth::user();
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
+        
+        // Mieter-Signatur
+        if (!empty($signatures['tenant'])) {
+            $uuid = (string)$pdo->query('SELECT UUID()')->fetchColumn();
+            $hash = hash('sha256', $signatures['tenant'] . $signatures['tenant_name'] . time());
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO protocol_signatures (
+                    id, protocol_id, signer_name, signer_role, signature_data,
+                    signature_hash, ip_address, user_agent, created_by, created_at
+                ) VALUES (
+                    ?, ?, ?, 'tenant', ?, ?, ?, ?, ?, NOW()
+                )
+            ");
+            $stmt->execute([
+                $uuid,
+                $protocolId,
+                $signatures['tenant_name'] ?? 'Mieter',
+                $signatures['tenant'],
+                $hash,
+                $ipAddress,
+                $userAgent,
+                $user['email'] ?? 'system'
+            ]);
+        }
+        
+        // Vermieter-Signatur
+        if (!empty($signatures['landlord'])) {
+            $uuid = (string)$pdo->query('SELECT UUID()')->fetchColumn();
+            $hash = hash('sha256', $signatures['landlord'] . $signatures['landlord_name'] . time());
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO protocol_signatures (
+                    id, protocol_id, signer_name, signer_role, signature_data,
+                    signature_hash, ip_address, user_agent, created_by, created_at
+                ) VALUES (
+                    ?, ?, ?, 'landlord', ?, ?, ?, ?, ?, NOW()
+                )
+            ");
+            $stmt->execute([
+                $uuid,
+                $protocolId,
+                $signatures['landlord_name'] ?? 'Vermieter',
+                $signatures['landlord'],
+                $hash,
+                $ipAddress,
+                $userAgent,
+                $user['email'] ?? 'system'
+            ]);
+        }
+        
+        // Zeugen-Signatur
+        if (!empty($signatures['witness'])) {
+            $uuid = (string)$pdo->query('SELECT UUID()')->fetchColumn();
+            $hash = hash('sha256', $signatures['witness'] . $signatures['witness_name'] . time());
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO protocol_signatures (
+                    id, protocol_id, signer_name, signer_role, signature_data,
+                    signature_hash, ip_address, user_agent, created_by, created_at
+                ) VALUES (
+                    ?, ?, ?, 'witness', ?, ?, ?, ?, ?, NOW()
+                )
+            ");
+            $stmt->execute([
+                $uuid,
+                $protocolId,
+                $signatures['witness_name'] ?? 'Zeuge',
+                $signatures['witness'],
+                $hash,
+                $ipAddress,
+                $userAgent,
+                $user['email'] ?? 'system'
+            ]);
+        }
     }
 }

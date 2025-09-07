@@ -199,6 +199,12 @@ final class View
     <!-- AdminKit Theme JS -->
     <script src="/assets/adminkit-theme.js"></script>
     
+    <!-- Signature Module (Open Source Signatur-Integration) -->
+    <?php if ($isAuthenticated && (str_contains($_SERVER['REQUEST_URI'] ?? '', '/protocols') || str_contains($_SERVER['REQUEST_URI'] ?? '', '/signature') || str_contains($_SERVER['REQUEST_URI'] ?? '', '/wizard'))): ?>
+    <script src="/assets/signature-pad.js"></script>
+    <script src="/js/signature-module.js"></script>
+    <?php endif; ?>
+    
     <!-- CSRF-Helper JavaScript -->
     <?php if ($csrfToken): ?>
     <script>

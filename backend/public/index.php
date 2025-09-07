@@ -237,6 +237,17 @@ switch ($path) {
         (new SettingsController())->mailSave();
         break;
 
+    // Signatur-Einstellungen
+    case '/settings/signatures':
+        Auth::requireAuth();
+        (new SettingsController())->signatures();
+        break;
+
+    case '/settings/signatures/save':
+        Auth::requireAuth();
+        (new SettingsController())->signaturesSave();
+        break;
+
     case '/settings/docusign':
         Auth::requireAuth();
         (new SettingsController())->docusign();
@@ -373,6 +384,12 @@ switch ($path) {
     case '/users/delete':
         Auth::requireAuth();
         (new UsersController())->delete();
+        break;
+
+    // Signatur Test-Seite
+    case '/signature/test':
+        Auth::requireAuth();
+        (new SignatureController())->test();
         break;
 
     // Digitale Signaturen (Open Source Alternative zu DocuSign)

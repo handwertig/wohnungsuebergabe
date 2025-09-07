@@ -39,7 +39,7 @@ final class SettingsController
         $items = [
             ['title' => 'Stammdaten', 'href' => '/settings', 'key' => 'general'],
             ['title' => 'Mailversand', 'href' => '/settings/mail', 'key' => 'mail'],
-            ['title' => 'DocuSign', 'href' => '/settings/docusign', 'key' => 'docusign'],
+            ['title' => 'Signaturen', 'href' => '/settings/signatures', 'key' => 'signatures'],
             ['title' => 'Textbausteine', 'href' => '/settings/texts', 'key' => 'texts'],
             ['title' => 'Benutzer', 'href' => '/settings/users', 'key' => 'users'],
             ['title' => 'Gestaltung', 'href' => '/settings/branding', 'key' => 'branding'],
@@ -254,7 +254,219 @@ final class SettingsController
         header('Location: /settings/mail');
     }
 
-    /* ---------- DocuSign-Einstellungen ---------- */
+    /* ---------- Signatur-Einstellungen ---------- */
+    
+    /**
+     * Signatur-Konfiguration anzeigen (Auswahl zwischen lokal und DocuSign)
+     */
+    public function signatures(): void {
+        Auth::requireAuth();
+        
+        // Aktuelle Einstellungen laden
+        $provider = Settings::get('signature_provider', 'local');
+        $requireAll = Settings::get('signature_require_all', 'false') === 'true';
+        $allowWitness = Settings::get('signature_allow_witness', 'true') === 'true';
+        $sendEmails = Settings::get('signature_send_emails', 'true') === 'true';
+        
+        // Lokale Signatur Einstellungen
+        $localEnabled = Settings::get('local_signature_enabled', 'true') === 'true';
+        $localDisclaimer = Settings::get('local_signature_disclaimer', 'Mit Ihrer digitalen Unterschrift bestätigen Sie die Richtigkeit der Angaben im Protokoll.');
+        $localLegalText = Settings::get('local_signature_legal_text', 'Die digitale Unterschrift ist rechtlich bindend gemäß eIDAS-Verordnung (EU) Nr. 910/2014.');
+        
+        // DocuSign Einstellungen
+        $docusignEnabled = Settings::get('docusign_enabled', 'false') === 'true';
+        $dsBaseUri = Settings::get('docusign_base_url', 'https://demo.docusign.net/restapi');
+        $dsAccountId = Settings::get('docusign_account_id', '');
+        $dsIntegrationKey = Settings::get('docusign_integration_key', '');
+        $dsSecretKey = Settings::get('docusign_secret_key', '');
+        $dsRedirectUri = Settings::get('docusign_redirect_uri', 'http://localhost:8080/docusign/callback');
+
+        $body = $this->tabs('signatures');
+        
+        // Haupt-Einstellungen
+        $body .= '<div class="card mb-3">';
+        $body .= '<div class="card-header">';
+        $body .= '<h5 class="mb-0"><i class="bi bi-pen me-2"></i>Signatur-Einstellungen</h5>';
+        $body .= '</div>';
+        $body .= '<div class="card-body">';
+        $body .= '<form method="post" action="/settings/signatures/save" class="row g-3">';
+        
+        // Provider-Auswahl
+        $body .= '<div class="col-12">';
+        $body .= '<label class="form-label">Signatur-Provider auswählen</label>';
+        $body .= '<div class="form-check">';
+        $body .= '<input class="form-check-input" type="radio" name="signature_provider" id="providerLocal" value="local"' . ($provider === 'local' ? ' checked' : '') . '>';
+        $body .= '<label class="form-check-label" for="providerLocal">';
+        $body .= '<strong>Lokale Signatur (Open Source)</strong><br>';
+        $body .= '<small class="text-muted">Integrierte Lösung mit digitaler Unterschrift direkt im Browser. Keine externen Dienste erforderlich.</small>';
+        $body .= '</label>';
+        $body .= '</div>';
+        $body .= '<div class="form-check mt-2">';
+        $body .= '<input class="form-check-input" type="radio" name="signature_provider" id="providerDocusign" value="docusign"' . ($provider === 'docusign' ? ' checked' : '') . '>';
+        $body .= '<label class="form-check-label" for="providerDocusign">';
+        $body .= '<strong>DocuSign</strong><br>';
+        $body .= '<small class="text-muted">Professionelle e-Signatur-Lösung mit erweiterter Rechtssicherheit (kostenpflichtig).</small>';
+        $body .= '</label>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        // Allgemeine Einstellungen
+        $body .= '<div class="col-12"><hr></div>';
+        $body .= '<div class="col-12"><h6>Allgemeine Einstellungen</h6></div>';
+        
+        $body .= '<div class="col-md-4">';
+        $body .= '<div class="form-check">';
+        $body .= '<input class="form-check-input" type="checkbox" name="signature_require_all" id="requireAll"' . ($requireAll ? ' checked' : '') . '>';
+        $body .= '<label class="form-check-label" for="requireAll">Alle Unterschriften erforderlich</label>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-4">';
+        $body .= '<div class="form-check">';
+        $body .= '<input class="form-check-input" type="checkbox" name="signature_allow_witness" id="allowWitness"' . ($allowWitness ? ' checked' : '') . '>';
+        $body .= '<label class="form-check-label" for="allowWitness">Zeugen-Unterschrift erlauben</label>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-4">';
+        $body .= '<div class="form-check">';
+        $body .= '<input class="form-check-input" type="checkbox" name="signature_send_emails" id="sendEmails"' . ($sendEmails ? ' checked' : '') . '>';
+        $body .= '<label class="form-check-label" for="sendEmails">E-Mail nach Unterschrift senden</label>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        // Lokale Signatur Einstellungen
+        $body .= '<div class="col-12"><hr></div>';
+        $body .= '<div class="col-12" id="localSettings">';
+        $body .= '<h6><i class="bi bi-house-door me-2"></i>Lokale Signatur Einstellungen</h6>';
+        $body .= '<div class="row g-3">';
+        
+        $body .= '<div class="col-12">';
+        $body .= '<label class="form-label">Hinweistext für Unterschrift</label>';
+        $body .= '<textarea class="form-control" name="local_signature_disclaimer" rows="2">' . $this->esc($localDisclaimer) . '</textarea>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-12">';
+        $body .= '<label class="form-label">Rechtlicher Hinweis</label>';
+        $body .= '<textarea class="form-control" name="local_signature_legal_text" rows="2">' . $this->esc($localLegalText) . '</textarea>';
+        $body .= '</div>';
+        
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        // DocuSign Einstellungen
+        $body .= '<div class="col-12"><hr></div>';
+        $body .= '<div class="col-12" id="docusignSettings">';
+        $body .= '<h6><i class="bi bi-cloud me-2"></i>DocuSign Einstellungen</h6>';
+        $body .= '<div class="row g-3">';
+        
+        $body .= '<div class="col-md-6">';
+        $body .= '<label class="form-label">Base URL</label>';
+        $body .= '<select class="form-select" name="docusign_base_url">';
+        $body .= '<option value="https://demo.docusign.net/restapi"' . ($dsBaseUri === 'https://demo.docusign.net/restapi' ? ' selected' : '') . '>Demo (Sandbox)</option>';
+        $body .= '<option value="https://na4.docusign.net/restapi"' . ($dsBaseUri === 'https://na4.docusign.net/restapi' ? ' selected' : '') . '>Produktion (NA)</option>';
+        $body .= '<option value="https://eu.docusign.net/restapi"' . ($dsBaseUri === 'https://eu.docusign.net/restapi' ? ' selected' : '') . '>Produktion (EU)</option>';
+        $body .= '</select>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-6">';
+        $body .= '<label class="form-label">Account ID</label>';
+        $body .= '<input class="form-control" name="docusign_account_id" value="' . $this->esc($dsAccountId) . '" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-6">';
+        $body .= '<label class="form-label">Integration Key</label>';
+        $body .= '<input class="form-control" name="docusign_integration_key" value="' . $this->esc($dsIntegrationKey) . '" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-md-6">';
+        $body .= '<label class="form-label">Secret Key</label>';
+        $body .= '<input class="form-control" type="password" name="docusign_secret_key" value="' . $this->esc($dsSecretKey) . '">';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-12">';
+        $body .= '<label class="form-label">Redirect URI</label>';
+        $body .= '<input class="form-control" name="docusign_redirect_uri" value="' . $this->esc($dsRedirectUri) . '">';
+        $body .= '<small class="text-muted">Diese URI muss in DocuSign als erlaubte Redirect-URI konfiguriert sein.</small>';
+        $body .= '</div>';
+        
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        $body .= '<div class="col-12"><hr></div>';
+        $body .= '<div class="col-12">';
+        $body .= '<button class="btn btn-primary">Einstellungen speichern</button>';
+        $body .= '<a href="/signature/test" class="btn btn-outline-secondary ms-2">Signatur testen</a>';
+        $body .= '</div>';
+        
+        $body .= '</form>';
+        $body .= '</div>';
+        $body .= '</div>';
+        
+        // JavaScript für dynamische Anzeige
+        $body .= '<script>';
+        $body .= 'document.addEventListener("DOMContentLoaded", function() {';
+        $body .= '  const localRadio = document.getElementById("providerLocal");';
+        $body .= '  const docusignRadio = document.getElementById("providerDocusign");';
+        $body .= '  const localSettings = document.getElementById("localSettings");';
+        $body .= '  const docusignSettings = document.getElementById("docusignSettings");';
+        $body .= '  ';
+        $body .= '  function toggleSettings() {';
+        $body .= '    if (localRadio.checked) {';
+        $body .= '      localSettings.style.opacity = "1";';
+        $body .= '      docusignSettings.style.opacity = "0.5";';
+        $body .= '    } else {';
+        $body .= '      localSettings.style.opacity = "0.5";';
+        $body .= '      docusignSettings.style.opacity = "1";';
+        $body .= '    }';
+        $body .= '  }';
+        $body .= '  ';
+        $body .= '  localRadio.addEventListener("change", toggleSettings);';
+        $body .= '  docusignRadio.addEventListener("change", toggleSettings);';
+        $body .= '  toggleSettings();';
+        $body .= '});';
+        $body .= '</script>';
+        
+        View::render('Einstellungen – Signaturen', $body);
+    }
+
+    /**
+     * Signatur-Konfiguration speichern
+     */
+    public function signaturesSave(): void {
+        Auth::requireAuth();
+        
+        // Provider-Auswahl
+        $provider = (string)(isset($_POST['signature_provider']) ? $_POST['signature_provider'] : 'local');
+        if (!in_array($provider, ['local', 'docusign'])) {
+            $provider = 'local';
+        }
+        
+        Settings::setMany([
+            'signature_provider' => $provider,
+            'signature_require_all' => isset($_POST['signature_require_all']) ? 'true' : 'false',
+            'signature_allow_witness' => isset($_POST['signature_allow_witness']) ? 'true' : 'false',
+            'signature_send_emails' => isset($_POST['signature_send_emails']) ? 'true' : 'false',
+            
+            // Lokale Signatur
+            'local_signature_enabled' => ($provider === 'local') ? 'true' : 'false',
+            'local_signature_disclaimer' => (string)(isset($_POST['local_signature_disclaimer']) ? $_POST['local_signature_disclaimer'] : ''),
+            'local_signature_legal_text' => (string)(isset($_POST['local_signature_legal_text']) ? $_POST['local_signature_legal_text'] : ''),
+            
+            // DocuSign
+            'docusign_enabled' => ($provider === 'docusign') ? 'true' : 'false',
+            'docusign_base_url' => (string)(isset($_POST['docusign_base_url']) ? $_POST['docusign_base_url'] : ''),
+            'docusign_account_id' => (string)(isset($_POST['docusign_account_id']) ? $_POST['docusign_account_id'] : ''),
+            'docusign_integration_key' => (string)(isset($_POST['docusign_integration_key']) ? $_POST['docusign_integration_key'] : ''),
+            'docusign_secret_key' => (string)(isset($_POST['docusign_secret_key']) ? $_POST['docusign_secret_key'] : ''),
+            'docusign_redirect_uri' => (string)(isset($_POST['docusign_redirect_uri']) ? $_POST['docusign_redirect_uri'] : ''),
+        ]);
+        
+        \App\Flash::add('success', 'Signatur-Einstellungen gespeichert. Aktiver Provider: ' . strtoupper($provider));
+        header('Location: /settings/signatures');
+    }
+
+    /* ---------- DocuSign-Einstellungen (Legacy - weiterleitung zu Signaturen) ---------- */
     
     /**
      * DocuSign-Konfiguration anzeigen

@@ -319,6 +319,7 @@ final class ProtocolsController
         $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-meters">Zähler</a></li>';
         $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-keys">Schlüssel</a></li>';
         $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-meta">Details</a></li>';
+        $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-signatures">Unterschriften</a></li>';
         $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-pdf-versions">PDF-Versionen</a></li>';
         $html .= '<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-protocol-log">Protokoll</a></li>';
         $html .= '</ul>';
@@ -635,12 +636,17 @@ final class ProtocolsController
         $html .= '</div>'; // card
         $html .= '</div>'; // tab-pane
         
-        // === TAB 6: PDF-VERSIONEN ===
+        // === TAB 6: SIGNATUREN ===
+        $html .= '<div class="tab-pane fade" id="tab-signatures">';
+        $html .= $this->renderSignaturesTab($id);
+        $html .= '</div>'; // tab-pane
+        
+        // === TAB 7: PDF-VERSIONEN ===
         $html .= '<div class="tab-pane fade" id="tab-pdf-versions">';
         $html .= $this->renderPDFVersionsTab($id);
         $html .= '</div>'; // tab-pane
         
-        // === TAB 7: PROTOKOLL-LOG ===
+        // === TAB 8: PROTOKOLL-LOG ===
         $html .= '<div class="tab-pane fade" id="tab-protocol-log">';
         $html .= $this->renderProtocolLogTab($id);
         $html .= '</div>'; // tab-pane
@@ -713,6 +719,171 @@ final class ProtocolsController
         </script>';
         
         View::render('Protokoll bearbeiten', $html);
+    }
+
+    /** Renderiert den Signaturen Tab */
+    private function renderSignaturesTab(string $protocolId): string
+    {
+        $pdo = Database::pdo();
+        
+        // Prüfe welcher Provider aktiv ist
+        $provider = Settings::get('signature_provider', 'local');
+        $requireAll = Settings::get('signature_require_all', 'false') === 'true';
+        $allowWitness = Settings::get('signature_allow_witness', 'true') === 'true';
+        
+        $html = '<div class="d-flex justify-content-between align-items-center mb-4">';
+        $html .= '<div>';
+        $html .= '<h5><i class="bi bi-pen text-primary"></i> Digitale Unterschriften</h5>';
+        $html .= '<p class="text-muted mb-0">Verwalten Sie digitale Unterschriften für dieses Protokoll</p>';
+        $html .= '</div>';
+        $html .= '<div class="btn-group" role="group">';
+        $html .= '<a href="/signature/sign?protocol_id=' . self::h($protocolId) . '" class="btn btn-primary">';
+        $html .= '<i class="bi bi-pen-fill"></i> Unterschrift hinzufügen';
+        $html .= '</a>';
+        $html .= '</div></div>';
+        
+        // Provider-Info
+        $html .= '<div class="alert alert-info mb-3">';
+        $html .= '<i class="bi bi-info-circle me-2"></i>';
+        $html .= '<strong>Aktiver Provider:</strong> ';
+        if ($provider === 'docusign') {
+            $html .= 'DocuSign (Externe Signatur)';
+        } else {
+            $html .= 'Lokale Signatur (Open Source)';
+        }
+        $html .= '</div>';
+        
+        // Bestehende Signaturen laden
+        try {
+            // Prüfe ob Tabelle existiert
+            $pdo->query("SELECT 1 FROM protocol_signatures LIMIT 1");
+            
+            $stmt = $pdo->prepare("
+                SELECT * FROM protocol_signatures 
+                WHERE protocol_id = ? 
+                ORDER BY created_at DESC
+            ");
+            $stmt->execute([$protocolId]);
+            $signatures = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\PDOException $e) {
+            // Tabelle existiert noch nicht
+            $signatures = [];
+            
+            $html .= '<div class="alert alert-warning">';
+            $html .= '<i class="bi bi-exclamation-triangle"></i> ';
+            $html .= 'Die Signatur-Tabelle wurde noch nicht erstellt. ';
+            $html .= 'Fügen Sie die erste Unterschrift hinzu um die Tabelle automatisch zu erstellen.';
+            $html .= '</div>';
+        }
+        
+        if (!empty($signatures)) {
+            $html .= '<div class="card">';
+            $html .= '<div class="card-body p-0">';
+            $html .= '<div class="table-responsive">';
+            $html .= '<table class="table table-hover mb-0">';
+            $html .= '<thead class="table-light">';
+            $html .= '<tr>';
+            $html .= '<th style="width: 20%;">Name</th>';
+            $html .= '<th style="width: 15%;">Rolle</th>';
+            $html .= '<th style="width: 20%;">Datum</th>';
+            $html .= '<th style="width: 30%;">Unterschrift</th>';
+            $html .= '<th style="width: 15%;">Status</th>';
+            $html .= '</tr></thead><tbody>';
+            
+            foreach ($signatures as $sig) {
+                $roleLabel = match($sig['signer_role'] ?? '') {
+                    'tenant' => 'Mieter',
+                    'landlord' => 'Vermieter',
+                    'owner' => 'Eigentümer',
+                    'manager' => 'Hausverwaltung',
+                    'witness' => 'Zeuge',
+                    default => $sig['signer_role'] ?? 'Unbekannt'
+                };
+                
+                $html .= '<tr>';
+                $html .= '<td>';
+                $html .= '<strong>' . self::h($sig['signer_name'] ?? '') . '</strong>';
+                if (!empty($sig['signer_email'])) {
+                    $html .= '<br><small class="text-muted">' . self::h($sig['signer_email']) . '</small>';
+                }
+                $html .= '</td>';
+                $html .= '<td><span class="badge bg-secondary">' . self::h($roleLabel) . '</span></td>';
+                $html .= '<td>' . date('d.m.Y H:i', strtotime($sig['created_at'])) . '</td>';
+                $html .= '<td>';
+                
+                if (!empty($sig['signature_data'])) {
+                    // Signatur-Vorschau
+                    $html .= '<div style="max-width: 200px; height: 60px; border: 1px solid #dee2e6; padding: 2px; background: white;">';
+                    $html .= '<img src="' . self::h($sig['signature_data']) . '" style="max-width: 100%; max-height: 100%; object-fit: contain;">';
+                    $html .= '</div>';
+                } else {
+                    $html .= '<span class="text-muted">Keine Vorschau</span>';
+                }
+                
+                $html .= '</td>';
+                $html .= '<td>';
+                
+                if (!empty($sig['is_valid'])) {
+                    $html .= '<span class="badge bg-success">Gültig</span>';
+                } else {
+                    $html .= '<span class="badge bg-warning text-dark">Ungültig</span>';
+                }
+                
+                $html .= '</td>';
+                $html .= '</tr>';
+            }
+            
+            $html .= '</tbody></table>';
+            $html .= '</div></div></div>';
+            
+            // Zusammenfassung
+            $tenantSigned = false;
+            $ownerSigned = false;
+            $managerSigned = false;
+            
+            foreach ($signatures as $sig) {
+                if ($sig['signer_role'] === 'tenant') $tenantSigned = true;
+                if ($sig['signer_role'] === 'owner' || $sig['signer_role'] === 'landlord') $ownerSigned = true;
+                if ($sig['signer_role'] === 'manager') $managerSigned = true;
+            }
+            
+            $html .= '<div class="mt-3">';
+            $html .= '<h6>Signatur-Status:</h6>';
+            $html .= '<div class="d-flex gap-3">';
+            $html .= '<div><i class="bi ' . ($tenantSigned ? 'bi-check-circle text-success' : 'bi-circle text-muted') . '"></i> Mieter</div>';
+            $html .= '<div><i class="bi ' . ($ownerSigned ? 'bi-check-circle text-success' : 'bi-circle text-muted') . '"></i> Eigentümer</div>';
+            $html .= '<div><i class="bi ' . ($managerSigned ? 'bi-check-circle text-success' : 'bi-circle text-muted') . '"></i> Hausverwaltung</div>';
+            $html .= '</div>';
+            $html .= '</div>';
+            
+        } else {
+            $html .= '<div class="card">';
+            $html .= '<div class="card-body text-center py-5">';
+            $html .= '<i class="bi bi-pen" style="font-size: 3rem; color: #6c757d;"></i>';
+            $html .= '<h5 class="mt-3 text-muted">Noch keine Unterschriften vorhanden</h5>';
+            $html .= '<p class="text-muted">Fügen Sie digitale Unterschriften hinzu um das Protokoll rechtsverbindlich zu machen.</p>';
+            $html .= '<a href="/signature/sign?protocol_id=' . self::h($protocolId) . '" class="btn btn-primary">';
+            $html .= '<i class="bi bi-pen-fill me-2"></i>Erste Unterschrift hinzufügen';
+            $html .= '</a>';
+            $html .= '</div>';
+            $html .= '</div>';
+        }
+        
+        // Hinweise
+        $html .= '<div class="mt-3">';
+        $html .= '<small class="text-muted">';
+        $html .= '<i class="bi bi-info-circle me-1"></i>';
+        if ($requireAll) {
+            $html .= 'Alle Parteien müssen unterschreiben bevor das Protokoll als vollständig gilt. ';
+        }
+        if ($allowWitness) {
+            $html .= 'Zeugen-Unterschriften sind erlaubt. ';
+        }
+        $html .= 'Einstellungen können unter <a href="/settings/signatures">Signatur-Einstellungen</a> angepasst werden.';
+        $html .= '</small>';
+        $html .= '</div>';
+        
+        return $html;
     }
 
     /** Renderiert den PDF-Versionierung Tab */
