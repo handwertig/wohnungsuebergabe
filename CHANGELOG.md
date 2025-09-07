@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2025-09-07
+
+### 🔧 Kritische Fehlerbehebung - Protokoll-Speicherung
+- **BEHOBEN:** Protokoll-Änderungen werden jetzt korrekt gespeichert
+- **BEHOBEN:** Routing-Fehler zu nicht-existierender working_save.php
+- **BEHOBEN:** System-Logging für Protokoll-Änderungen funktioniert
+- **BEHOBEN:** Event-Tracking für Protokolle aktiviert
+
+### 🛠️ Technische Verbesserungen
+- ProtocolsController::save() Methode vollständig implementiert
+- Transaktionale Sicherheit bei Protokoll-Updates
+- Umfassendes Error-Handling mit Rollback
+- Automatische Versionierung von Protokoll-Änderungen
+
+### 🗄️ Datenbank-Optimierungen
+- protocol_events Tabelle für Ereignis-Tracking
+- audit_log Tabelle für Änderungsverfolgung
+- email_log Tabelle für Versand-Protokolle
+- Optimierte Indizes für bessere Performance
+
+### 🔧 Neue Diagnose-Tools
+- debug_protocol_save.sh - Umfassende Protokoll-Diagnose
+- fix_protocol_save.sh - Automatische Reparatur
+- final_test_protocol.sh - Funktionstest
+
 ## [2.0.3] - 2025-09-07
 
 ### 🔧 Finale Lösung - Settings & Logging
