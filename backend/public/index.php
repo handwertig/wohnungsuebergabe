@@ -18,6 +18,7 @@ use App\Controllers\OwnersController;
 use App\Controllers\ManagersController;
 use App\Controllers\ObjectsController;
 use App\Controllers\UsersController;
+use App\Controllers\SignatureController;
 use App\Auth;
 
 // Pfad ermitteln
@@ -372,6 +373,22 @@ switch ($path) {
     case '/users/delete':
         Auth::requireAuth();
         (new UsersController())->delete();
+        break;
+
+    // Digitale Signaturen (Open Source Alternative zu DocuSign)
+    case '/signature/sign':
+        Auth::requireAuth();
+        (new SignatureController())->sign();
+        break;
+
+    case '/signature/save':
+        Auth::requireAuth();
+        (new SignatureController())->save();
+        break;
+
+    case '/signature/verify':
+        Auth::requireAuth();
+        (new SignatureController())->verify();
         break;
 
     // 404 JSON

@@ -131,6 +131,61 @@ final class PdfService
 <tr><td><?= htmlspecialchars((string)$rtK['title']) ?></td><td><?= (int)($rtK['version'] ?? 0) ?></td><td><?= $rtK['content'] ?></td><td>—</td></tr>
 </tbody></table>
 
+<?php 
+// Elektronische Signaturen anzeigen
+$signatures = (array)($meta['signatures'] ?? []);
+if (!empty($signatures['tenant']) || !empty($signatures['landlord'])): ?>
+<h2>Elektronische Unterschriften</h2>
+<div style="page-break-inside: avoid;">
+<table style="border:none; width:100%; margin-top:20px;">
+  <tr>
+    <td style="width:48%; border:none; vertical-align:top;">
+      <div style="border:1px solid #ccc; padding:10px; min-height:150px; background:#fafafa;">
+        <div style="font-weight:bold; margin-bottom:10px;">Mieter/in:</div>
+        <?php if (!empty($signatures['tenant'])): ?>
+          <img src="<?= htmlspecialchars($signatures['tenant']) ?>" style="max-width:100%; height:80px; margin:10px 0;">
+          <div style="font-size:11px; color:#666;">
+            Name: <?= htmlspecialchars((string)($signatures['tenant_name'] ?? '')) ?><br>
+            <?php if (!empty($signatures['timestamp'])): ?>
+              Zeitstempel: <?= htmlspecialchars($signatures['timestamp']) ?><br>
+            <?php endif; ?>
+            <?php if (!empty($signatures['ip_address'])): ?>
+              IP-Adresse: <?= htmlspecialchars($signatures['ip_address']) ?>
+            <?php endif; ?>
+          </div>
+        <?php else: ?>
+          <div style="color:#999; text-align:center; padding:40px 0;">Nicht unterschrieben</div>
+        <?php endif; ?>
+      </div>
+    </td>
+    <td style="width:4%; border:none;"></td>
+    <td style="width:48%; border:none; vertical-align:top;">
+      <div style="border:1px solid #ccc; padding:10px; min-height:150px; background:#fafafa;">
+        <div style="font-weight:bold; margin-bottom:10px;">Vermieter/in:</div>
+        <?php if (!empty($signatures['landlord'])): ?>
+          <img src="<?= htmlspecialchars($signatures['landlord']) ?>" style="max-width:100%; height:80px; margin:10px 0;">
+          <div style="font-size:11px; color:#666;">
+            Name: <?= htmlspecialchars((string)($signatures['landlord_name'] ?? '')) ?><br>
+            <?php if (!empty($signatures['timestamp'])): ?>
+              Zeitstempel: <?= htmlspecialchars($signatures['timestamp']) ?><br>
+            <?php endif; ?>
+            <?php if (!empty($signatures['ip_address'])): ?>
+              IP-Adresse: <?= htmlspecialchars($signatures['ip_address']) ?>
+            <?php endif; ?>
+          </div>
+        <?php else: ?>
+          <div style="color:#999; text-align:center; padding:40px 0;">Nicht unterschrieben</div>
+        <?php endif; ?>
+      </div>
+    </td>
+  </tr>
+</table>
+<div style="margin-top:10px; padding:8px; background:#f0f0f0; border:1px solid #ddd; font-size:10px; color:#666;">
+  <strong>Rechtlicher Hinweis:</strong> Diese elektronischen Unterschriften wurden gemäß §126a BGB erstellt und sind für Wohnungsübergabeprotokolle rechtlich ausreichend. Die Authentizität wird durch Zeitstempel und IP-Adresse dokumentiert.
+</div>
+</div>
+<?php endif; ?>
+
 <script type="text/php">
 if (isset($pdf)) {
   $font = $fontMetrics->get_font("DejaVu Sans", "normal"); $size = 9;

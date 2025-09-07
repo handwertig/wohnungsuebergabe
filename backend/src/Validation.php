@@ -6,6 +6,23 @@ namespace App;
 final class Validation
 {
     /**
+     * Prüft, ob die erforderlichen Felder vorhanden und nicht leer sind
+     * @param array $data Die zu prüfenden Daten
+     * @param array $requiredFields Array mit den Namen der Pflichtfelder
+     * @return array Array mit Fehlermeldungen (leer wenn alles ok)
+     */
+    public static function required(array $data, array $requiredFields): array
+    {
+        $errors = [];
+        foreach ($requiredFields as $field) {
+            if (!isset($data[$field]) || trim((string)$data[$field]) === '') {
+                $errors[$field] = ucfirst($field) . ' ist ein Pflichtfeld.';
+            }
+        }
+        return $errors;
+    }
+
+    /**
      * @param string $type  einzug|auszug|zwischen
      * @param array  $post  Mischdaten (POST + ggf. Draftteile)
      * @param string $phase 'step1' | 'full'

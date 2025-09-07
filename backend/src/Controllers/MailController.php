@@ -9,6 +9,8 @@ use App\Settings;
 use App\Flash;
 use PDO;
 use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception;
 
 final class MailController
 {
@@ -30,13 +32,39 @@ final class MailController
 
         // PDF generieren (falls nicht vorhanden)
         $pdfRow = $pdo->prepare("SELECT signed_pdf_path, pdf_path FROM protocol_versions WHERE protocol_id=? AND version_no=?");
-$pdfRow->execute([$protocolId,$versionNo]);
-$rowPdf = $pdfRow->fetch(\PDO::FETCH_ASSOC);
-$path = (string)($rowPdf["signed_pdf_path"] ?? "");
-if ($path === "" || !is_file($path)) { $path = (string)($rowPdf["pdf_path"] ?? ""); }
-if ($path === "" || !is_file($path)) { $path = \App\PdfService::renderAndSave($protocolId, $versionNo, true); }
-        $pdfPath->execute([$protocolId,$versionNo]); $path=(string)$pdfPath->fetchColumn();
-        if (!$path || !is_file($path)) { $path = \App\PdfService::renderAndSave($protocolId, $versionNo); }
+        $pdfRow->execute([$protocolId, $versionNo]);
+        $rowPdf = $pdfRow->fetch(\PDO::FETCH_ASSOC);
+        
+        $path = '';
+        if ($rowPdf) {
+            // Zuerst signiertes PDF versuchen
+            $path = (string)($rowPdf['signed_pdf_path'] ?? '');
+            if ($path === '' || !is_file($path)) {
+                // Dann normales PDF
+                $path = (string)($rowPdf['pdf_path'] ?? '');
+            }
+        }
+        
+        // Falls kein PDF vorhanden, generieren
+        if ($path === '' || !is_file($path)) {
+            if (class_exists('\App\PdfService')) {
+                $path = \App\PdfService::renderAndSave($protocolId, $versionNo, true);
+            } else {
+                // Fallback: Direkter Pfad
+                $storageDir = dirname(__DIR__, 2) . '/storage/pdfs/' . $protocolId;
+                if (!is_dir($storageDir)) {
+                    mkdir($storageDir, 0755, true);
+                }
+                $path = $storageDir . '/v' . $versionNo . '.pdf';
+                
+                // PDF muss existieren oder generiert werden
+                if (!is_file($path)) {
+                    Flash::add('error', 'PDF konnte nicht generiert werden.');
+                    header('Location: /protocols/edit?id=' . $protocolId);
+                    return;
+                }
+            }
+        }
 
         // Protokoll + Payload laden (für Empfänger)
         $p = $pdo->prepare("SELECT p.id,p.owner_id,p.manager_id,p.tenant_name,p.payload,
@@ -60,13 +88,13 @@ if ($path === "" || !is_file($path)) { $path = \App\PdfService::renderAndSave($p
         if ($toEmail === '') { Flash::add('error','Keine E‑Mailadresse für Empfänger vorhanden.'); header('Location: /protocols/edit?id='.$protocolId); return; }
 
         // SMTP Settings
-        $host = Settings::get('smtp.host','mailpit');
-        $port = (int)(Settings::get('smtp.port','1025') ?? 1025);
-        $secure = Settings::get('smtp.secure',''); // '', tls, ssl
-        $user = Settings::get('smtp.user','');
-        $pass = Settings::get('smtp.pass','');
-        $fromAddr = Settings::get('smtp.from_addr','app@example.com');
-        $fromName = Settings::get('smtp.from_name','Wohnungsübergabe');
+        $host = Settings::get('smtp_host','mailpit');
+        $port = (int)(Settings::get('smtp_port','1025') ?? 1025);
+        $secure = Settings::get('smtp_secure',''); // '', tls, ssl
+        $user = Settings::get('smtp_user','');
+        $pass = Settings::get('smtp_pass','');
+        $fromAddr = Settings::get('smtp_from_email','app@example.com');
+        $fromName = Settings::get('smtp_from_name','Wohnungsübergabe');
 
         // Mail
         $mail = new PHPMailer(true);
@@ -83,11 +111,11 @@ if ($path === "" || !is_file($path)) { $path = \App\PdfService::renderAndSave($p
         $subject = sprintf('Übergabeprotokoll – %s %s – %s (v%d)',
             (string)($addr['street'] ?? ''), (string)($addr['house_no'] ?? ''), (string)($addr['city'] ?? ''), $versionNo);
         $mail->Subject = $subject;
-        $mail->Body = "Guten Tag,\n\n".
-  "im Anhang erhalten Sie das Übergabeprotokoll (".$row['tenant_name'].").".
-  "\nObjekt: ".($addr['street'] ?? '')." ".($addr['house_no'] ?? '').", ".($addr['city'] ?? '')."\n".
-  "Version: v".$versionNo." (erstellt: ".($row['v_created_at'] ?? '').")\n\n".
-  "Mit freundlichen Grüßen\nWohnungsübergabe";
+        $mail->Body = "Guten Tag,\n\n" .
+                  "im Anhang erhalten Sie das Übergabeprotokoll (" . $row['tenant_name'] . ")." .
+                  "\nObjekt: " . ($addr['street'] ?? '') . " " . ($addr['house_no'] ?? '') . ", " . ($addr['city'] ?? '') . "\n" .
+                  "Version: v" . $versionNo . "\n\n" .
+                  "Mit freundlichen Grüßen\nWohnungsübergabe";
         $mail->addAttachment($path, 'protokoll_v'.$versionNo.'.pdf');
 
         // Log vorbereiten
@@ -106,7 +134,20 @@ if ($path === "" || !is_file($path)) { $path = \App\PdfService::renderAndSave($p
 
             Flash::add('success','E‑Mail versendet an '.$toEmail.'.');
         } catch (\Throwable $e) {
-            $pdo->prepare("UPDATE email_log SET status='failed', error_msg=? WHERE id=?")->execute([substr($e->getMessage(),0,500),$logId]);
+            // Prüfe ob error_msg Spalte existiert
+            $stmt = $pdo->query("SHOW COLUMNS FROM email_log LIKE 'error_msg'");
+            if ($stmt->rowCount() > 0) {
+                $pdo->prepare("UPDATE email_log SET status='failed', error_msg=? WHERE id=?")->execute([substr($e->getMessage(),0,500),$logId]);
+            } else {
+                // Fallback: nur Status updaten
+                $pdo->prepare("UPDATE email_log SET status='failed' WHERE id=?")->execute([$logId]);
+                // Spalte hinzufügen für nächstes Mal
+                try {
+                    $pdo->exec("ALTER TABLE email_log ADD COLUMN error_msg TEXT AFTER status");
+                } catch (\PDOException $ex) {
+                    // Ignorieren falls bereits vorhanden
+                }
+            }
             Flash::add('error','Versand fehlgeschlagen: '.$e->getMessage());
         }
 

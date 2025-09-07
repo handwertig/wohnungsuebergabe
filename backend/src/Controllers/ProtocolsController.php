@@ -457,21 +457,26 @@ final class ProtocolsController
         $html .= '<div class="card-header">Zählerstände</div>';
         $html .= '<div class="card-body">';
         
+        // WICHTIG: Keys müssen mit ProtocolWizardController übereinstimmen!
         $meterTypes = [
-            'strom_wohnung' => 'Strom Wohnung',
-            'strom_haus' => 'Strom Haus (Allgemein)',
-            'gas_wohnung' => 'Gas Wohnung',
-            'gas_haus' => 'Gas Haus (Allgemein)',
-            'kaltwasser_kueche' => 'Kaltwasser Küche',
-            'warmwasser_kueche' => 'Warmwasser Küche',
-            'kaltwasser_bad' => 'Kaltwasser Bad',
-            'warmwasser_bad' => 'Warmwasser Bad',
-            'wasser_waschmaschine' => 'Wasser Waschmaschine',
+            'strom_we' => 'Strom (Wohneinheit)',
+            'strom_allg' => 'Strom (Haus allgemein)',
+            'gas_we' => 'Gas (Wohneinheit)',
+            'gas_allg' => 'Gas (Haus allgemein)',
+            'wasser_kueche_kalt' => 'Wasser Küche (kalt)',
+            'wasser_kueche_warm' => 'Wasser Küche (warm)',
+            'wasser_bad_kalt' => 'Wasser Bad (kalt)',
+            'wasser_bad_warm' => 'Wasser Bad (warm)',
+            'wasser_wm' => 'Wasser Waschmaschine (blau)',
         ];
         
         $html .= '<div class="row g-3">';
         foreach ($meterTypes as $key => $label) {
             $meter = $meters[$key] ?? [];
+            // Kompatibilität mit Wizard: unterstütze sowohl 'no'/'val' als auch 'number'/'value'
+            $meterNumber = $meter['no'] ?? $meter['number'] ?? '';
+            $meterValue = $meter['val'] ?? $meter['value'] ?? '';
+            
             $html .= '<div class="col-md-6">';
             $html .= '<div class="card">';
             $html .= '<div class="card-header">' . $label . '</div>';
@@ -479,11 +484,11 @@ final class ProtocolsController
             $html .= '<div class="row g-2">';
             $html .= '<div class="col-6">';
             $html .= '<label class="form-label">Zählernummer</label>';
-            $html .= '<input class="form-control" name="meters[' . $key . '][number]" value="' . self::h($meter['number'] ?? '') . '">';
+            $html .= '<input class="form-control" name="meters[' . $key . '][no]" value="' . self::h($meterNumber) . '">';
             $html .= '</div>';
             $html .= '<div class="col-6">';
             $html .= '<label class="form-label">Zählerstand</label>';
-            $html .= '<input class="form-control" name="meters[' . $key . '][value]" value="' . self::h($meter['value'] ?? '') . '">';
+            $html .= '<input class="form-control" name="meters[' . $key . '][val]" value="' . self::h($meterValue) . '">';
             $html .= '</div>';
             $html .= '</div>';
             $html .= '</div>';
@@ -1801,11 +1806,15 @@ final class ProtocolsController
         <table>
             <tr><th>Zähler</th><th>Nummer</th><th>Stand</th></tr>';
             foreach ($meters as $type => $meter) {
-                if (!empty($meter['number']) || !empty($meter['value'])) {
+                // Unterstütze beide Feldnamen-Varianten
+                $meterNumber = $meter['no'] ?? $meter['number'] ?? '';
+                $meterValue = $meter['val'] ?? $meter['value'] ?? '';
+                
+                if (!empty($meterNumber) || !empty($meterValue)) {
                     $html .= '<tr>';
                     $html .= '<td>' . self::h(str_replace('_', ' ', ucfirst($type))) . '</td>';
-                    $html .= '<td>' . self::h($meter['number'] ?? '') . '</td>';
-                    $html .= '<td>' . self::h($meter['value'] ?? '') . '</td>';
+                    $html .= '<td>' . self::h($meterNumber) . '</td>';
+                    $html .= '<td>' . self::h($meterValue) . '</td>';
                     $html .= '</tr>';
                 }
             }
@@ -1874,15 +1883,14 @@ final class ProtocolsController
         $to = (string)($_GET['to'] ?? 'owner');
         
         if ($protocolId === '') { 
-            http_response_code(400); 
-            header('Content-Type:application/json'); 
-            echo json_encode(['error'=>'protocol_id fehlt']); 
+            Flash::add('error', 'Protokoll-ID fehlt.');
+            header('Location: /protocols');
             return; 
         }
         
-        // Für jetzt: Placeholder
-        Flash::add('info', 'E-Mail-Versand wird implementiert.');
-        header('Location: /protocols/edit?id=' . $protocolId);
+        // Weiterleitung an MailController
+        $mailController = new \App\Controllers\MailController();
+        $mailController->send();
     }
 
     /** API: Version Details für Modal */
