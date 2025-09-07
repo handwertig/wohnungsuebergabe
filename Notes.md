@@ -341,3 +341,5 @@ CREATE TABLE protocol_pdfs (
 
 *PDF-Versionierung vollständig implementiert: 06.09.2025 um 10:33 Uhr*
 *Kollationsproblem behoben: 06.09.2025 um 11:15 Uhr*
+*ProtocolsController.php repariert: 06.09.2025 um 11:45 Uhr*
+*Protokoll-Tab mit Audit-Log hinzugefügt: 06.09.2025 um 12:15 Uhr*

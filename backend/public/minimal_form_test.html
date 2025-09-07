@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal Form Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .form-container { background: #f5f5f5; padding: 20px; border-radius: 5px; max-width: 600px; }
+        .result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        input, select, textarea { display: block; margin: 5px 0; padding: 8px; width: 100%; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>Minimal Form Test</h1>
+    
+    <div class="form-container">
+        <h3>Direkte Simulation des Edit-Formulars</h3>
+        
+        <button onclick="loadCurrentData()" type="button">1. Aktuelle Daten laden</button>
+        
+        <form id="testForm" method="POST" action="/protocols/save">
+            <input type="hidden" name="_csrf_token" id="csrf_token" value="">
+            <input type="hidden" name="id" value="82cc7de7-7d1e-11f0-89a6-822b82242c5d">
+            
+            <label>Tenant Name:</label>
+            <input type="text" name="tenant_name" id="tenant_name" required>
+            
+            <label>Type:</label>
+            <select name="type" required>
+                <option value="auszug" selected>Auszug</option>
+                <option value="einzug">Einzug</option>
+                <option value="zwischenprotokoll">Zwischenprotokoll</option>
+            </select>
+            
+            <label>Stadt:</label>
+            <input type="text" name="address[city]" value="Test Stadt">
+            
+            <label>Straße:</label>
+            <input type="text" name="address[street]" value="Test Straße">
+            
+            <label>Hausnummer:</label>
+            <input type="text" name="address[house_no]" value="123">
+            
+            <label>Wohneinheit:</label>
+            <input type="text" name="address[unit_label]" value="Test Einheit">
+            
+            <label>Notizen:</label>
+            <textarea name="meta[notes]" rows="3">Minimal Test Notizen</textarea>
+            
+            <button type="submit">Speichern (Minimal Test)</button>
+        </form>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        async function loadCurrentData() {
+            showResult('🔄 Lade aktuelle Daten...', 'info');
+            
+            try {
+                // Lade Edit-Seite um CSRF und aktuelle Daten zu holen
+                const response = await fetch('/protocols/edit?id=82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                const html = await response.text();
+                
+                // CSRF Token extrahieren
+                const csrfMatch = html.match(/name="_csrf_token"[^>]*value="([^"]*)"/);
+                if (csrfMatch) {
+                    document.getElementById('csrf_token').value = csrfMatch[1];
+                    showResult('✅ CSRF Token geladen: ' + csrfMatch[1].substring(0, 10) + '...', 'success');
+                } else {
+                    showResult('❌ CSRF Token nicht gefunden', 'error');
+                }
+                
+                // Tenant Name extrahieren
+                const tenantMatch = html.match(/name="tenant_name"[^>]*value="([^"]*)"/);
+                if (tenantMatch) {
+                    const currentName = tenantMatch[1];
+                    document.getElementById('tenant_name').value = currentName + ' [MINIMAL ' + new Date().toLocaleTimeString() + ']';
+                    showResult('✅ Aktueller Mieter: ' + currentName, 'success');
+                } else {
+                    showResult('❌ Tenant Name nicht gefunden', 'error');
+                }
+                
+            } catch (error) {
+                showResult('❌ Fehler beim Laden: ' + error.message, 'error');
+            }
+        }
+
+        function showResult(message, type) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = 'result ' + type;
+            div.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            results.appendChild(div);
+            
+            // Auto-remove nach 30 Sekunden
+            setTimeout(() => {
+                if (div.parentNode) {
+                    div.parentNode.removeChild(div);
+                }
+            }, 30000);
+        }
+
+        // Form Submit Handler
+        document.getElementById('testForm').addEventListener('submit', function(e) {
+            const formData = new FormData(this);
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+            
+            showResult('🚀 Form wird gesendet mit: ' + JSON.stringify(data, null, 2), 'info');
+            
+            // Form normal submitten lassen
+            // e.preventDefault(); // Auskommentiert damit Form normal submitted wird
+        });
+
+        // Auto-load beim Seitenstart
+        window.addEventListener('load', function() {
+            setTimeout(loadCurrentData, 500);
+        });
+    </script>
+</body>
+</html>

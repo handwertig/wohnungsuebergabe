@@ -264,6 +264,35 @@ Dieses Projekt steht unter der MIT-Lizenz. Siehe `LICENSE` für Details.
 
 ---
 
-**Version:** 2.0.0  
+## PDF-Versionierung
+
+Die Software unterstützt jetzt vollständige PDF-Versionierung für Wohnungsübergabeprotokolle:
+
+### Features
+- **Automatische Versionierung**: Bei jeder Änderung wird eine neue Version erstellt
+- **PDF-Generierung**: Für jede Version kann ein versioniertes PDF generiert werden
+- **Direktlinks**: PDFs sind unter `http://localhost:8080/protocols/edit?id={ID}` verfügbar
+- **Archivierung**: Alle Versionen bleiben dauerhaft verfügbar
+
+### Verwendung
+1. Öffnen Sie ein Protokoll im Editor (`/protocols/edit?id={ID}`)
+2. Im Tab "PDF-Versionen" sehen Sie alle verfügbaren Versionen
+3. Klicken Sie auf "PDF generieren" für eine spezifische Version
+4. Der PDF-Link wird automatisch erstellt und ist dauerhaft verfügbar
+
+### API-Endpunkte
+- `GET /protocols/pdf?id={ID}&version={VERSION}` - PDF für spezifische Version
+- `POST /protocols/create-version` - Neue Version erstellen
+- `GET /protocols/versions?id={ID}` - Versionsliste als JSON
+- `POST /protocols/generate-all-pdfs` - Alle PDFs generieren
+
+### Dateisystem
+- PDFs werden in `backend/storage/pdfs/` gespeichert
+- Dateiformat: `protokoll_{ID}_v{VERSION}.pdf`
+- Automatische Bereinigung älterer PDFs möglich
+
+---
+
+**Version:** 2.1.0 (PDF-Versionierung)  
 **Last Updated:** September 2025  
 **Maintainer:** Handwertig DevOps

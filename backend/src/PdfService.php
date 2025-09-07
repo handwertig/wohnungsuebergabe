@@ -22,10 +22,22 @@ final class PdfService
         $getLatest=function($name)use($pdo){ $s=$pdo->prepare("SELECT title,content,version FROM legal_texts WHERE name=? ORDER BY version DESC LIMIT 1"); $s->execute([$name]); $r=$s->fetch(PDO::FETCH_ASSOC); return $r?:['title'=>'','content'=>'','version'=>0]; };
         $rtD=$getLatest('datenschutz'); $rtE=$getLatest('entsorgung'); $rtM=$getLatest('marketing'); $rtK=$getLatest('kaution_hinweis');
 
-        // Logo (Settings oder Fallback)
+        // Logo (Settings oder Fallback auf Text)
         $logoTag=''; $logoPath=(string)Settings::get('pdf_logo_path',''); $fb=__DIR__.'/../public/images/logo.svg';
-        if($logoPath && is_file($logoPath)){ $ext=strtolower((string)pathinfo($logoPath,PATHINFO_EXTENSION)); $mime=($ext==='svg')?'image/svg+xml':(($ext==='png')?'image/png':(($ext==='jpg'||$ext==='jpeg')?'image/jpeg':'application/octet-stream')); $data=base64_encode((string)file_get_contents($logoPath)); $logoTag='<img src="data:'.$mime.';base64,'.$data.'" style="height:28px;width:auto">'; }
-        elseif(is_file($fb)){ $data=base64_encode((string)file_get_contents($fb)); $logoTag='<img src="data:image/svg+xml;base64,'.$data.'" style="height:28px;width:auto">'; }
+        if($logoPath && is_file($logoPath)){ 
+            $ext=strtolower((string)pathinfo($logoPath,PATHINFO_EXTENSION)); 
+            $mime=($ext==='svg')?'image/svg+xml':(($ext==='png')?'image/png':(($ext==='jpg'||$ext==='jpeg')?'image/jpeg':'application/octet-stream')); 
+            $data=base64_encode((string)file_get_contents($logoPath)); 
+            $logoTag='<img src="data:'.$mime.';base64,'.$data.'" style="height:28px;width:auto">'; 
+        }
+        elseif(is_file($fb)){ 
+            $data=base64_encode((string)file_get_contents($fb)); 
+            $logoTag='<img src="data:image/svg+xml;base64,'.$data.'" style="height:28px;width:auto">'; 
+        }
+        else {
+            // Fallback: Standardtext wenn kein Logo verfügbar
+            $logoTag='<div style="font-size:18px;font-weight:bold;color:#333;padding:5px 0;">Wohnungsübergabe</div>';
+        }
 
         $type=(string)$row['type'];
         $typeLabel = ($type==='einzug') ? 'Einzugsprotokoll' : (($type==='auszug') ? 'Auszugsprotokoll' : 'Zwischenabnahme');

@@ -16,7 +16,10 @@ final class Auth
         $path = ini_get('session.save_path');
         if (!$path) {
             $path = '/tmp';
-            ini_set('session.save_path', $path);
+            // Nur ini_set wenn Headers noch nicht gesendet
+            if (!headers_sent()) {
+                ini_set('session.save_path', $path);
+            }
         }
 
         // Wenn schon Header gesendet (z. B. durch versehentliche Ausgabe),

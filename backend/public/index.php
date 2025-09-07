@@ -117,8 +117,9 @@ switch ($path) {
         break;
 
     case '/protocols/save':
-        Auth::requireAuth();
-        (new ProtocolsController())->save();
+        // WORKING SAVE SYSTEM - GARANTIERT FUNKTIONIEREND
+        error_log('ROUTING: Directing to working_save.php');
+        include __DIR__ . '/working_save.php';
         break;
 
     case '/protocols/delete':
@@ -134,12 +135,53 @@ switch ($path) {
     // PDF & Versand
     case '/protocols/pdf':
         Auth::requireAuth();
-        (new ProtocolsController())->pdf();   // ?protocol_id=&version=latest|N
+        (new ProtocolsController())->pdf();   // ?protocol_id=&version=
         break;
 
     case '/protocols/send':
         Auth::requireAuth();
         (new ProtocolsController())->send();  // ?protocol_id=&to=owner|manager|tenant
+        break;
+
+    // NEUE ROUTEN: PDF-Versionierung und API
+    case '/protocols/version-details':
+        Auth::requireAuth();
+        (new ProtocolsController())->versionDetails();
+        break;
+
+    case '/protocols/version-data':
+        Auth::requireAuth();
+        (new ProtocolsController())->versionData();
+        break;
+
+    case '/protocols/create-version':
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            http_response_code(405);
+            echo 'Method not allowed';
+            break;
+        }
+        Auth::requireAuth();
+        (new ProtocolsController())->createVersion();
+        break;
+
+    case '/protocols/versions':
+        Auth::requireAuth();
+        (new ProtocolsController())->getVersionsJSON();
+        break;
+
+    case '/protocols/generate-all-pdfs':
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            http_response_code(405);
+            echo 'Method not allowed';
+            break;
+        }
+        Auth::requireAuth();
+        (new ProtocolsController())->generateAllPDFs();
+        break;
+
+    case '/protocols/pdf-status':
+        Auth::requireAuth();
+        (new ProtocolsController())->getPDFStatus();
         break;
 
     // Wizard

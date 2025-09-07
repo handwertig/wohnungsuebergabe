@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Form Save Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-form { background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .result { background: #e7f3ff; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+        input, select, button { margin: 5px 0; padding: 8px; width: 300px; }
+        button { background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; width: auto; padding: 10px 20px; }
+        button:hover { background: #0056b3; }
+        .debug { background: #fff3cd; padding: 10px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Direct Form Save Test</h1>
+    
+    <div class="debug">
+        <h3>Debug Information</h3>
+        <p><strong>Current URL:</strong> <span id="currentUrl"></span></p>
+        <p><strong>Protocol ID:</strong> 82cc7de7-7d1e-11f0-89a6-822b82242c5d</p>
+        <p><strong>Target Action:</strong> /protocols/save</p>
+    </div>
+
+    <!-- Test 1: Minimales Formular -->
+    <div class="test-form">
+        <h3>Test 1: Minimales Formular (ohne CSRF)</h3>
+        <form method="POST" action="/protocols/save" onsubmit="return logFormSubmit(this, 'test1')">
+            <input type="hidden" name="id" value="82cc7de7-7d1e-11f0-89a6-822b82242c5d">
+            <label>Tenant Name:</label><br>
+            <input type="text" name="tenant_name" value="Test Minimal Form" required><br>
+            <label>Type:</label><br>
+            <select name="type" required>
+                <option value="auszug" selected>Auszug</option>
+                <option value="einzug">Einzug</option>
+            </select><br>
+            <button type="submit">Test Minimal Save</button>
+        </form>
+    </div>
+
+    <!-- Test 2: Mit CSRF Token -->
+    <div class="test-form">
+        <h3>Test 2: Mit CSRF Token</h3>
+        <form method="POST" action="/protocols/save" onsubmit="return logFormSubmit(this, 'test2')">
+            <input type="hidden" name="id" value="82cc7de7-7d1e-11f0-89a6-822b82242c5d">
+            <label>CSRF Token:</label><br>
+            <input type="text" name="_csrf_token" id="csrf_token" placeholder="Token wird geladen..." readonly><br>
+            <label>Tenant Name:</label><br>
+            <input type="text" name="tenant_name" value="Test With CSRF" required><br>
+            <label>Type:</label><br>
+            <select name="type" required>
+                <option value="auszug" selected>Auszug</option>
+                <option value="einzug">Einzug</option>
+            </select><br>
+            <button type="submit">Test With CSRF</button>
+        </form>
+    </div>
+
+    <!-- Test 3: Mit allen Daten -->
+    <div class="test-form">
+        <h3>Test 3: Vollständiges Formular</h3>
+        <form method="POST" action="/protocols/save" onsubmit="return logFormSubmit(this, 'test3')">
+            <input type="hidden" name="id" value="82cc7de7-7d1e-11f0-89a6-822b82242c5d">
+            <input type="hidden" name="_csrf_token" value="">
+            
+            <label>Tenant Name:</label><br>
+            <input type="text" name="tenant_name" value="Test Complete Form" required><br>
+            
+            <label>Type:</label><br>
+            <select name="type" required>
+                <option value="auszug" selected>Auszug</option>
+                <option value="einzug">Einzug</option>
+            </select><br>
+            
+            <label>Address City:</label><br>
+            <input type="text" name="address[city]" value="Test Stadt"><br>
+            
+            <label>Address Street:</label><br>
+            <input type="text" name="address[street]" value="Test Straße"><br>
+            
+            <label>Notes:</label><br>
+            <input type="text" name="meta[notes]" value="Test Notizen vom direkten Formular"><br>
+            
+            <button type="submit">Test Complete Save</button>
+        </form>
+    </div>
+
+    <!-- Test 4: Alternative Action -->
+    <div class="test-form">
+        <h3>Test 4: Alternative zu Debug-Endpoint</h3>
+        <form method="POST" action="/log_save_requests.php" onsubmit="return logFormSubmit(this, 'test4')">
+            <input type="hidden" name="id" value="82cc7de7-7d1e-11f0-89a6-822b82242c5d">
+            <label>Tenant Name:</label><br>
+            <input type="text" name="tenant_name" value="Test Logging" required><br>
+            <button type="submit">Test Request Logging</button>
+        </form>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        // Set current URL
+        document.getElementById('currentUrl').textContent = window.location.href;
+
+        // Load CSRF token
+        async function loadCSRFToken() {
+            try {
+                const response = await fetch('/protocols/edit?id=82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                const html = await response.text();
+                const match = html.match(/name="_csrf_token"[^>]*value="([^"]*)"/);
+                if (match) {
+                    document.getElementById('csrf_token').value = match[1];
+                    // Also set hidden field in test 3
+                    document.querySelector('form:nth-of-type(3) input[name="_csrf_token"]').value = match[1];
+                    showResult('✅ CSRF Token loaded: ' + match[1].substring(0, 10) + '...', 'success');
+                } else {
+                    showResult('❌ Could not load CSRF token', 'error');
+                }
+            } catch (error) {
+                showResult('❌ Error loading CSRF token: ' + error.message, 'error');
+            }
+        }
+
+        // Log form submit
+        function logFormSubmit(form, testName) {
+            const formData = new FormData(form);
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+            
+            showResult('🚀 ' + testName + ' submitted with data: ' + JSON.stringify(data), 'debug');
+            
+            // Let the form submit normally
+            return true;
+        }
+
+        // Show result message
+        function showResult(message, type) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = 'result ' + type;
+            div.textContent = message;
+            results.appendChild(div);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (div.parentNode) {
+                    div.parentNode.removeChild(div);
+                }
+            }, 10000);
+        }
+
+        // Auto-load CSRF token on page load
+        window.addEventListener('load', function() {
+            loadCSRFToken();
+        });
+
+        // Add submit event listeners for better debugging
+        document.addEventListener('DOMContentLoaded', function() {
+            const forms = document.querySelectorAll('form[action="/protocols/save"]');
+            forms.forEach(function(form, index) {
+                form.addEventListener('submit', function(e) {
+                    showResult('📝 Form ' + (index + 1) + ' is submitting to: ' + form.action, 'debug');
+                });
+            });
+        });
+    </script>
+</body>
+</html>

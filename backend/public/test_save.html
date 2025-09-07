@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick Protocol Save Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Quick Protocol Save Test</h1>
+    
+    <div class="result">
+        <h3>Test Protocol</h3>
+        <p><strong>ID:</strong> 82cc7de7-7d1e-11f0-89a6-822b82242c5d</p>
+        <p><strong>Current Time:</strong> <span id="currentTime"></span></p>
+    </div>
+
+    <button onclick="testDebugEndpoint()">Test Debug Endpoint (bypass CSRF)</button>
+    <button onclick="testNormalSave()">Test Normal Save</button>
+    <button onclick="loadCurrentData()">Load Current Data</button>
+    
+    <div id="results"></div>
+
+    <script>
+        document.getElementById('currentTime').textContent = new Date().toLocaleString();
+
+        async function testDebugEndpoint() {
+            const resultDiv = document.getElementById('results');
+            resultDiv.innerHTML = '<div class="result">🚀 Testing debug endpoint...</div>';
+            
+            try {
+                const formData = new URLSearchParams();
+                formData.append('id', '82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                formData.append('tenant_name', 'Debug Test ' + new Date().toLocaleTimeString());
+                formData.append('type', 'auszug');
+                
+                const response = await fetch('/debug_save.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData
+                });
+                
+                const text = await response.text();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '<div class="result success">✅ Debug endpoint successful!</div><pre>' + text + '</pre>';
+                } else {
+                    resultDiv.innerHTML = '<div class="result error">❌ Debug endpoint failed (HTTP ' + response.status + ')</div><pre>' + text + '</pre>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="result error">❌ Error: ' + error.message + '</div>';
+            }
+        }
+
+        async function testNormalSave() {
+            const resultDiv = document.getElementById('results');
+            resultDiv.innerHTML = '<div class="result">🚀 Testing normal save endpoint...</div>';
+            
+            try {
+                // First, get CSRF token from edit page
+                const editResponse = await fetch('/protocols/edit?id=82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                const editHtml = await editResponse.text();
+                
+                const csrfMatch = editHtml.match(/name="_csrf_token"[^>]*value="([^"]*)"/);
+                if (!csrfMatch) {
+                    throw new Error('Could not extract CSRF token');
+                }
+                
+                const csrfToken = csrfMatch[1];
+                
+                // Now try to save
+                const formData = new URLSearchParams();
+                formData.append('_csrf_token', csrfToken);
+                formData.append('id', '82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                formData.append('tenant_name', 'Normal Save Test ' + new Date().toLocaleTimeString());
+                formData.append('type', 'auszug');
+                
+                const response = await fetch('/protocols/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData,
+                    redirect: 'manual' // Don't follow redirects
+                });
+                
+                if (response.status === 302) {
+                    const location = response.headers.get('Location');
+                    resultDiv.innerHTML = '<div class="result success">✅ Normal save successful! Redirected to: ' + location + '</div>';
+                } else {
+                    const text = await response.text();
+                    resultDiv.innerHTML = '<div class="result error">❌ Normal save failed (HTTP ' + response.status + ')</div><pre>' + text + '</pre>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="result error">❌ Error: ' + error.message + '</div>';
+            }
+        }
+
+        async function loadCurrentData() {
+            const resultDiv = document.getElementById('results');
+            resultDiv.innerHTML = '<div class="result">🔍 Loading current protocol data...</div>';
+            
+            try {
+                const response = await fetch('/protocols/edit?id=82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                const html = await response.text();
+                
+                // Extract tenant name
+                const tenantMatch = html.match(/name="tenant_name"[^>]*value="([^"]*)"/);
+                const tenant = tenantMatch ? tenantMatch[1] : 'Not found';
+                
+                // Extract type
+                const typeMatch = html.match(/name="type"[^>]*>\s*<option[^>]*selected[^>]*>([^<]*)</);
+                const type = typeMatch ? typeMatch[1] : 'Not found';
+                
+                resultDiv.innerHTML = `
+                    <div class="result success">✅ Current data loaded:</div>
+                    <pre>Tenant: ${tenant}
+Type: ${type}
+Last update: ${new Date().toLocaleString()}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="result error">❌ Error: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

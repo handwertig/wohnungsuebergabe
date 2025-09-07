@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Emergency Save Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .alert { padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin: 20px 0; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; text-decoration: none; display: inline-block; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn:hover { opacity: 0.8; }
+        input, select, textarea { padding: 8px; margin: 5px 0; width: 100%; border: 1px solid #ddd; border-radius: 4px; }
+        label { font-weight: bold; display: block; margin-top: 10px; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚨 Emergency Save System</h1>
+        
+        <div class="alert alert-info">
+            <strong>Status:</strong> Emergency Save Handler ist aktiv. Das normale Save-System wurde umgangen.
+        </div>
+        
+        <div class="card">
+            <h3>System-Diagnose</h3>
+            <button class="btn btn-primary" onclick="loadCurrentData()">📋 Aktuelle Daten laden</button>
+            <button class="btn btn-warning" onclick="testEmergencySave()">🚨 Emergency Save testen</button>
+            <button class="btn btn-success" onclick="checkResult()">✅ Ergebnis prüfen</button>
+        </div>
+        
+        <div class="card">
+            <h3>Emergency Test Formular</h3>
+            <form id="emergencyForm" method="POST" action="/protocols/save">
+                <input type="hidden" name="id" value="82cc7de7-7d1e-11f0-89a6-822b82242c5d">
+                
+                <label>Mieter Name:</label>
+                <input type="text" name="tenant_name" id="tenant_name" required>
+                
+                <label>Typ:</label>
+                <select name="type" required>
+                    <option value="auszug" selected>Auszug</option>
+                    <option value="einzug">Einzug</option>
+                    <option value="zwischenprotokoll">Zwischenprotokoll</option>
+                </select>
+                
+                <label>Stadt:</label>
+                <input type="text" name="address[city]" value="Emergency Stadt">
+                
+                <label>Straße:</label>
+                <input type="text" name="address[street]" value="Emergency Straße">
+                
+                <label>Hausnummer:</label>
+                <input type="text" name="address[house_no]" value="911">
+                
+                <label>Notizen:</label>
+                <textarea name="meta[notes]" rows="3">Emergency Save Test durchgeführt</textarea>
+                
+                <button type="submit" class="btn btn-success">🚨 Emergency Save</button>
+            </form>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        async function loadCurrentData() {
+            showResult('🔄 Lade aktuelle Daten...', 'info');
+            
+            try {
+                const response = await fetch('/protocols/edit?id=82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                const html = await response.text();
+                
+                // Mieter Name extrahieren
+                const tenantMatch = html.match(/name="tenant_name"[^>]*value="([^"]*)"/);
+                if (tenantMatch) {
+                    const currentName = tenantMatch[1];
+                    document.getElementById('tenant_name').value = currentName + ' [EMERGENCY ' + new Date().toLocaleTimeString() + ']';
+                    showResult('✅ Aktueller Mieter: ' + currentName, 'success');
+                } else {
+                    showResult('❌ Tenant Name nicht extrahierbar', 'error');
+                }
+                
+            } catch (error) {
+                showResult('❌ Fehler beim Laden: ' + error.message, 'error');
+            }
+        }
+
+        async function testEmergencySave() {
+            showResult('🚨 Teste Emergency Save direkt...', 'info');
+            
+            try {
+                const formData = new FormData();
+                formData.append('id', '82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                formData.append('tenant_name', 'EMERGENCY DIRECT TEST ' + new Date().toLocaleTimeString());
+                formData.append('type', 'auszug');
+                formData.append('address[city]', 'Emergency Stadt Direct');
+                
+                const response = await fetch('/emergency_save.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.redirected || response.status === 302) {
+                    showResult('✅ Emergency Save erfolgreich (Redirect erkannt)', 'success');
+                } else {
+                    const text = await response.text();
+                    showResult('⚠ Response: ' + text.substring(0, 200), 'info');
+                }
+                
+            } catch (error) {
+                showResult('❌ Emergency Save Fehler: ' + error.message, 'error');
+            }
+        }
+
+        async function checkResult() {
+            showResult('🔍 Prüfe Speicher-Ergebnis...', 'info');
+            
+            try {
+                const response = await fetch('/check_silent_test.php');
+                const result = await response.json();
+                
+                if (result.success) {
+                    showResult('🎉 SUCCESS: ' + result.message + ' - Aktueller Mieter: ' + result.current_tenant, 'success');
+                } else {
+                    showResult('❌ FAILED: ' + result.message, 'error');
+                }
+                
+                showResult('📊 Details: ' + JSON.stringify(result, null, 2), 'info');
+                
+            } catch (error) {
+                showResult('❌ Prüfung fehlgeschlagen: ' + error.message, 'error');
+            }
+        }
+
+        function showResult(message, type) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = 'alert alert-' + type;
+            
+            if (typeof message === 'object') {
+                div.innerHTML = '<pre>' + JSON.stringify(message, null, 2) + '</pre>';
+            } else {
+                div.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            }
+            
+            results.appendChild(div);
+            
+            // Auto-scroll
+            div.scrollIntoView({ behavior: 'smooth' });
+            
+            // Auto-remove nach 30 Sekunden (außer Errors)
+            if (type !== 'error') {
+                setTimeout(() => {
+                    if (div.parentNode) {
+                        div.parentNode.removeChild(div);
+                    }
+                }, 30000);
+            }
+        }
+
+        // Form Submit Handler
+        document.getElementById('emergencyForm').addEventListener('submit', function(e) {
+            showResult('🚨 Emergency Form wird gesendet...', 'info');
+            // Form normal submitten lassen
+        });
+
+        // Auto-load beim Start
+        window.addEventListener('load', function() {
+            setTimeout(loadCurrentData, 500);
+        });
+    </script>
+</body>
+</html>

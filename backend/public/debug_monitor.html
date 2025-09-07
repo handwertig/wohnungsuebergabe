@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Save Process</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin: 20px 0; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .alert { padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .alert-info { background: #d1ecf1; color: #0c5460; }
+        .alert-success { background: #d4edda; color: #155724; }
+        .alert-danger { background: #f8d7da; color: #721c24; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+        .status { font-weight: bold; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Save Process Debug</h1>
+        
+        <div class="alert alert-info">
+            <strong>Debug Modus aktiv:</strong> Alle Save-Requests werden jetzt geloggt und analysiert.
+        </div>
+        
+        <div class="card">
+            <h3>Live Status Monitor</h3>
+            <button class="btn btn-primary" onclick="checkCurrentStatus()">📊 Status prüfen</button>
+            <button class="btn btn-success" onclick="testDirectSave()">🚨 Direct Save Test</button>
+            <button class="btn btn-danger" onclick="clearLogs()">🗑️ Logs leeren</button>
+            
+            <div id="status"></div>
+        </div>
+        
+        <div class="card">
+            <h3>📋 Anweisungen für manuellen Test:</h3>
+            <ol>
+                <li><strong>Öffne in neuem Tab:</strong> <a href="/protocols/edit?id=82cc7de7-7d1e-11f0-89a6-822b82242c5d" target="_blank">Edit-Formular</a></li>
+                <li><strong>Ändere den Mieternamen</strong> auf "Bernd Test [Zeit]"</li>
+                <li><strong>Klicke "Speichern"</strong></li>
+                <li><strong>Komme zurück hierher</strong> und klicke "📊 Status prüfen"</li>
+            </ol>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        async function checkCurrentStatus() {
+            showResult('🔄 Prüfe aktuellen Status...', 'info');
+            
+            try {
+                // 1. Check aktuelle Daten
+                const response = await fetch('/check_silent_test.php');
+                const result = await response.json();
+                
+                showResult('📊 Aktueller Status:', 'info');
+                showResult(JSON.stringify(result, null, 2), 'info');
+                
+                // 2. Check ob Logs da sind
+                const now = new Date();
+                showResult('⏰ Letzte Prüfung: ' + now.toLocaleTimeString(), 'success');
+                
+            } catch (error) {
+                showResult('❌ Status-Fehler: ' + error.message, 'danger');
+            }
+        }
+
+        async function testDirectSave() {
+            showResult('🚨 Teste direkten Save...', 'info');
+            
+            try {
+                const formData = new FormData();
+                formData.append('id', '82cc7de7-7d1e-11f0-89a6-822b82242c5d');
+                formData.append('tenant_name', 'DIRECT DEBUG TEST ' + new Date().toLocaleTimeString());
+                formData.append('type', 'auszug');
+                
+                const response = await fetch('/protocols/save', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.redirected) {
+                    showResult('✅ Direct Save erfolgreich (Redirect)', 'success');
+                } else {
+                    const text = await response.text();
+                    showResult('📤 Response: ' + text.substring(0, 300), 'info');
+                }
+                
+                // Status nach Save prüfen
+                setTimeout(checkCurrentStatus, 1000);
+                
+            } catch (error) {
+                showResult('❌ Direct Save Fehler: ' + error.message, 'danger');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('results').innerHTML = '';
+            showResult('🗑️ Logs geleert', 'success');
+        }
+
+        function showResult(message, type) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = 'alert alert-' + type;
+            
+            if (typeof message === 'object') {
+                div.innerHTML = '<pre>' + JSON.stringify(message, null, 2) + '</pre>';
+            } else if (message.startsWith('{') || message.startsWith('[')) {
+                div.innerHTML = '<pre>' + message + '</pre>';
+            } else {
+                div.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            }
+            
+            results.appendChild(div);
+            
+            // Auto-scroll
+            div.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Auto-start
+        window.addEventListener('load', function() {
+            setTimeout(checkCurrentStatus, 500);
+        });
+        
+        // Auto-refresh alle 10 Sekunden
+        setInterval(checkCurrentStatus, 10000);
+    </script>
+</body>
+</html>
