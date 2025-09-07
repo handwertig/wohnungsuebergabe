@@ -346,8 +346,8 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert. Siehe [LICENSE](LICENSE) fü
 | 🔐 Authentifizierung | ✅ Stable | 1.0 |
 | 📱 Mobile Support | ✅ Stable | 1.0 |
 | 🔍 Audit-Logging | ✅ Stable | 1.0 |
-| ✍️ Digital Signatures | 🚧 Planned | 2.0 |
-| 📧 E-Mail Integration | 🚧 Development | 1.1 |
+| ✍️ Digital Signatures | ✅ Stable | 2.0 |
+| 📧 E-Mail Integration | ✅ Stable | 2.0 |
 | 🌐 Multi-Language | 📋 Backlog | 2.0 |
 
 ---
