@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2025-09-07
+
+### 🔧 Kritische Fehlerbehebung - Settings & Logging
+- **BEHOBEN:** Settings werden jetzt korrekt in der Datenbank gespeichert
+- **BEHOBEN:** System-Log schreibt wieder alle Änderungen mit
+- **BEHOBEN:** Mail-Einstellungen (SMTP) werden korrekt persistiert
+- **BEHOBEN:** DocuSign-Konfiguration wird richtig gespeichert
+- **BEHOBEN:** Textbausteine-Versionierung funktioniert wieder
+
+### 🛠️ Verbesserte Settings-Klasse
+- **NEU:** Automatisches Logging aller Settings-Änderungen
+- **NEU:** Transaktionssicherheit bei setMany() Operationen
+- **NEU:** Debug-Methode für Settings-Diagnose
+- **VERBESSERT:** Fehlerbehandlung mit detaillierten Error-Logs
+- **VERBESSERT:** Cache-Management für bessere Performance
+
+### 📊 System-Logger Verbesserungen
+- **NEU:** Mehrere Fallback-Ebenen für robustes Logging
+- **NEU:** Automatische Tabellen-Erstellung wenn fehlend
+- **VERBESSERT:** Kompatibilität mit verschiedenen DB-Strukturen
+- **VERBESSERT:** Performance bei hohem Log-Aufkommen
+
+### 🗄️ Datenbank-Stabilität
+- **NEU:** Automatische Reparatur-Skripte für Settings/Logs
+- **NEU:** Migrations für fehlende Tabellen-Spalten
+- **VERBESSERT:** Konsistente UTF8MB4 Kollation
+- **VERBESSERT:** Indizes für bessere Query-Performance
+
 ## [2.0.1] - 2025-09-06
 
 ### 🔧 Kritische Fehlerbehebung
