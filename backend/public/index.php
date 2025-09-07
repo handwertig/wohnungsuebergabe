@@ -127,6 +127,11 @@ switch ($path) {
         (new ProtocolsController())->delete();
         break;
 
+    case '/protocols/restore':
+        Auth::requireAuth();
+        (new ProtocolsController())->restore();
+        break;
+
     case '/protocols/export':
         Auth::requireAuth();
         (new ProtocolsController())->export();

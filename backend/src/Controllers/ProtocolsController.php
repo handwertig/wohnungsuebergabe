@@ -198,6 +198,9 @@ final class ProtocolsController
                                           <a class="btn btn-outline-secondary" href="/protocols/pdf?protocol_id=<?= $v['id'] ?>" target="_blank" title="PDF ansehen">
                                             <i class="bi bi-file-pdf"></i>
                                           </a>
+                                          <button class="btn btn-outline-danger" onclick="deleteProtocol('<?= $v['id'] ?>', '<?= htmlspecialchars($v['tenant_name'], ENT_QUOTES) ?>')" title="Löschen">
+                                            <i class="bi bi-trash"></i>
+                                          </button>
                                         </div>
                                       </td>
                                     </tr>
@@ -219,6 +222,27 @@ final class ProtocolsController
               <?php endforeach; ?>
             </div>
         <?php endif; ?>
+        
+        <!-- JavaScript für Lösch-Bestätigung -->
+        <script>
+        function deleteProtocol(id, name) {
+            if (confirm('Möchten Sie das Protokoll für "' + name + '" wirklich löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.')) {
+                // Erstelle ein Form für den DELETE-Request
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/protocols/delete';
+                
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'id';
+                input.value = id;
+                
+                form.appendChild(input);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+        </script>
         
         <?php
         $html = ob_get_clean();
@@ -656,9 +680,14 @@ final class ProtocolsController
         
         // Submit-Buttons - INNERHALB des Forms!
         $html .= '<div class="mt-4 d-flex justify-content-between">';
+        $html .= '<div class="d-flex gap-2">';
         $html .= '<a class="btn btn-outline-secondary" href="/protocols">';
         $html .= '<i class="bi bi-arrow-left me-2"></i>Zurück zur Übersicht';
         $html .= '</a>';
+        $html .= '<button type="button" class="btn btn-danger" onclick="deleteProtocolFromEdit(\'' . self::h($id) . '\', \'' . self::h(addslashes($protocol['tenant_name'] ?? '')) . '\')">';
+        $html .= '<i class="bi bi-trash me-2"></i>Löschen';
+        $html .= '</button>';
+        $html .= '</div>';
         $html .= '<div class="btn-group">';
         // Explizit type="submit" und keine btn-submit Klasse (die vom AdminKit abgefangen wird)
         $html .= '<button type="submit" class="btn btn-primary" id="save-protocol-btn">';
@@ -717,6 +746,25 @@ final class ProtocolsController
             
             console.log("[ProtocolSave] Event-Handler installiert");
         });
+        
+        // JavaScript für Lösch-Bestätigung
+        function deleteProtocolFromEdit(id, name) {
+            if (confirm('Möchten Sie das Protokoll für "' + name + '" wirklich löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.\n\nAlle zugehörigen Daten wie Unterschriften, PDF-Versionen und Logs werden ebenfalls gelöscht.')) {
+                // Erstelle ein Form für den DELETE-Request
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/protocols/delete';
+                
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'id';
+                input.value = id;
+                
+                form.appendChild(input);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
         </script>';
         
         View::render('Protokoll bearbeiten', $html);
@@ -1774,11 +1822,93 @@ final class ProtocolsController
         }
     }
     
+    /** POST: /protocols/delete - Protokoll löschen (Soft-Delete) */
     public function delete(): void 
     { 
-        Auth::requireAuth(); 
-        Flash::add('info','Löschen-Funktion wird implementiert.'); 
-        header('Location:/protocols'); 
+        Auth::requireAuth();
+        
+        // Protokoll-ID aus POST oder GET holen
+        $protocolId = $_POST['id'] ?? $_GET['id'] ?? '';
+        
+        if (empty($protocolId)) {
+            Flash::add('error', 'Protokoll-ID fehlt.');
+            header('Location: /protocols');
+            exit;
+        }
+        
+        $pdo = Database::pdo();
+        
+        try {
+            // Prüfe ob Protokoll existiert
+            $stmt = $pdo->prepare("SELECT * FROM protocols WHERE id = ? AND deleted_at IS NULL");
+            $stmt->execute([$protocolId]);
+            $protocol = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$protocol) {
+                Flash::add('error', 'Protokoll nicht gefunden oder bereits gelöscht.');
+                header('Location: /protocols');
+                exit;
+            }
+            
+            // Transaction starten
+            $pdo->beginTransaction();
+            
+            // Soft-Delete durchführen
+            $stmt = $pdo->prepare("UPDATE protocols SET deleted_at = NOW() WHERE id = ?");
+            $success = $stmt->execute([$protocolId]);
+            
+            if (!$success) {
+                throw new \Exception('Löschen fehlgeschlagen');
+            }
+            
+            // Commit
+            $pdo->commit();
+            
+            // Event-Logging
+            try {
+                if (class_exists('\App\EventLogger')) {
+                    $user = Auth::user();
+                    \App\EventLogger::logProtocolEvent(
+                        $protocolId,
+                        'deleted',
+                        'Protokoll gelöscht: ' . $protocol['tenant_name'] . ' (' . $protocol['type'] . ')',
+                        $user['email'] ?? 'system'
+                    );
+                }
+            } catch (\Throwable $e) {
+                error_log('Event logging failed: ' . $e->getMessage());
+            }
+            
+            // System-Logging
+            try {
+                if (class_exists('\App\SystemLogger')) {
+                    \App\SystemLogger::logProtocolDeleted($protocolId, [
+                        'type' => $protocol['type'] ?? '',
+                        'tenant_name' => $protocol['tenant_name'] ?? '',
+                        'city' => $protocol['city'] ?? '',
+                        'street' => $protocol['street'] ?? '',
+                        'unit' => $protocol['unit_label'] ?? ''
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                error_log('System logging failed: ' . $e->getMessage());
+            }
+            
+            Flash::add('success', 'Protokoll erfolgreich gelöscht.');
+            header('Location: /protocols');
+            exit;
+            
+        } catch (\Throwable $e) {
+            // Rollback bei Fehlern
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            
+            error_log('Protocol delete error: ' . $e->getMessage());
+            Flash::add('error', 'Fehler beim Löschen: ' . $e->getMessage());
+            header('Location: /protocols');
+            exit;
+        }
     }
     
     public function export(): void 
@@ -2139,6 +2269,68 @@ final class ProtocolsController
         }
     }
 
+    /** POST: /protocols/restore - Protokoll wiederherstellen */
+    public function restore(): void 
+    {
+        Auth::requireAuth();
+        
+        $protocolId = $_POST['id'] ?? $_GET['id'] ?? '';
+        
+        if (empty($protocolId)) {
+            Flash::add('error', 'Protokoll-ID fehlt.');
+            header('Location: /protocols');
+            exit;
+        }
+        
+        $pdo = Database::pdo();
+        
+        try {
+            // Prüfe ob gelöschtes Protokoll existiert
+            $stmt = $pdo->prepare("SELECT * FROM protocols WHERE id = ? AND deleted_at IS NOT NULL");
+            $stmt->execute([$protocolId]);
+            $protocol = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$protocol) {
+                Flash::add('error', 'Gelöschtes Protokoll nicht gefunden.');
+                header('Location: /protocols');
+                exit;
+            }
+            
+            // Wiederherstellen
+            $stmt = $pdo->prepare("UPDATE protocols SET deleted_at = NULL WHERE id = ?");
+            $success = $stmt->execute([$protocolId]);
+            
+            if (!$success) {
+                throw new \Exception('Wiederherstellung fehlgeschlagen');
+            }
+            
+            // Event-Logging
+            try {
+                if (class_exists('\App\EventLogger')) {
+                    $user = Auth::user();
+                    \App\EventLogger::logProtocolEvent(
+                        $protocolId,
+                        'restored',
+                        'Protokoll wiederhergestellt: ' . $protocol['tenant_name'] . ' (' . $protocol['type'] . ')',
+                        $user['email'] ?? 'system'
+                    );
+                }
+            } catch (\Throwable $e) {
+                error_log('Event logging failed: ' . $e->getMessage());
+            }
+            
+            Flash::add('success', 'Protokoll erfolgreich wiederhergestellt.');
+            header('Location: /protocols/edit?id=' . $protocolId);
+            exit;
+            
+        } catch (\Throwable $e) {
+            error_log('Protocol restore error: ' . $e->getMessage());
+            Flash::add('error', 'Fehler bei der Wiederherstellung: ' . $e->getMessage());
+            header('Location: /protocols');
+            exit;
+        }
+    }
+    
     /** Formatiert Dateigröße */
     private function formatFileSize(int $bytes): string
     {
