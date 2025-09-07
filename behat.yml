@@ -1,0 +1,24 @@
+default:
+  suites:
+    protocol_wizard:
+      paths:
+        - tests/behat/features
+      contexts:
+        - Tests\Behat\Bootstrap\ProtocolWizardContext
+        - Tests\Behat\Bootstrap\WebContext
+        - Tests\Behat\Bootstrap\ProtocolWizardComprehensiveContext
+  extensions:
+    Behat\MinkExtension:
+      base_url: 'http://localhost:8080'
+      browser_name: 'chrome'
+      sessions:
+        default:
+          chrome:
+            api_url: http://localhost:9515
+        selenium2:
+          selenium2:
+            wd_host: http://localhost:4444/wd/hub
+            capabilities:
+              browserName: chrome
+              browser: chrome
+              version: ''

@@ -1,213 +1,356 @@
-# Wohnungsübergabe-System
+# 🏠 Wohnungsübergabe Protokoll-Wizard
 
-Ein modernes, benutzerfreundliches System zur Verwaltung von Wohnungsübergaben mit PDF-Generierung, E-Mail-Integration und umfassendem Audit-System.
+Ein professionelles Web-basiertes System zur digitalen Erstellung und Verwaltung von Wohnungsübergabeprotokollen für Vermieter, Hausverwaltungen und Immobilienunternehmen.
 
-## 🚀 Version 2.0.5 - Production Ready
+## 🎯 Übersicht
 
-### ✨ Highlights dieser Version
-- Vollständige Unterstützung für "Zwischenprotokoll"
-- Event-Logging System funktioniert zuverlässig
-- Docker-Befehle korrigiert und dokumentiert
-- UUID v4 Generator für sichere IDs
-- Robuste Fehlerbehandlung implementiert
+Das Wohnungsübergabe Protokoll-System digitalisiert den kompletten Prozess der Wohnungsübergabe:
 
-## 📋 Features
+- ✅ **Digitale Protokoll-Erstellung** mit intuitivem Wizard
+- ✅ **Einzugs-, Auszugs- und Zwischenprotokolle** 
+- ✅ **Responsive Design** für Desktop, Tablet und Mobile
+- ✅ **PDF-Generierung** für offizielle Dokumente
+- ✅ **Versionierung** und Änderungshistorie
+- ✅ **Multi-Objekt-Verwaltung** für Portfolio-Management
+- ✅ **Sichere Authentifizierung** und Rechteverwaltung
 
-### Kernfunktionen
-- **Digitale Übergabeprotokolle**
-  - Einzugsprotokoll
-  - Auszugsprotokoll
-  - Zwischenprotokoll
-- **PDF-Generierung** mit Versionierung
-- **E-Mail-Integration** mit SMTP-Support
-- **Event-Tracking** für vollständige Historie
-- **Responsive Design** für alle Geräte
-- **Benutzer- und Rechteverwaltung**
-
-### Administration
-- Multi-Tenant-Architektur
-- System-Audit-Log
-- Protocol-Events Tracking
-- Konfigurierbare Einstellungen
-- Anpassbares Branding
-
-### Datenmanagement
-- Objektverwaltung (Immobilien/Wohneinheiten)
-- Kontaktverwaltung (Eigentümer/Hausverwaltungen)
-- Protokoll-Templates
-- Erweiterte Suchfunktionen
-
-## 🛠 Technische Details
-
-### Tech-Stack
-- **Backend:** PHP 8.1+ (OOP)
-- **Frontend:** Bootstrap 5.3 + AdminKit Theme
-- **Datenbank:** MariaDB 11.4
-- **Container:** Docker & Docker Compose
-- **PDF:** TCPDF/Dompdf
-- **E-Mail:** PHPMailer
-
-### Architektur
-- MVC-Pattern
-- Repository-Pattern
-- Service-Layer
-- PSR-4 Autoloading
-- UUID v4 für IDs
-
-## 📦 Installation
+## 🚀 Quick Start
 
 ### Voraussetzungen
-- Docker & Docker Compose (v2.x)
-- Git
-- 4GB RAM
-- 10GB Speicherplatz
 
-### Quick Start
+- Docker & Docker Compose
+- Mindestens 4GB RAM
+- Freie Ports: 8080 (Web), 3307 (DB), 8081 (phpMyAdmin), 8025 (Mail)
+
+### Installation
 
 ```bash
-# 1. Repository klonen
+# Repository klonen
 git clone <repository-url>
 cd wohnungsuebergabe
 
-# 2. Setup ausführen (startet Docker und konfiguriert alles)
-chmod +x setup.sh
-./setup.sh
+# Services starten
+docker-compose up -d
 
-# Alternative: Manueller Start
-docker compose up -d
+# Web-Interface öffnen
+open http://localhost:8080
 ```
 
-### Zugriff
-- **Frontend:** http://localhost:8080
-- **phpMyAdmin:** http://localhost:8081 (root/root)
-- **MailPit:** http://localhost:8025
+### Erste Schritte
 
-## 🐳 Docker-Befehle
+1. **Admin-Account erstellen**: Öffnen Sie http://localhost:8080/register
+2. **Objekt anlegen**: Gehen Sie zu "Stammdaten" → "Objekte"
+3. **Einheiten definieren**: Fügen Sie Wohneinheiten hinzu
+4. **Erstes Protokoll**: Nutzen Sie den Wizard unter "Protokolle" → "Neues Protokoll"
 
-### Wichtig: Neue Syntax ab v2.0.5
+## 🏗️ Architektur
 
-```bash
-# RICHTIG (neu):
-docker compose exec app php ...      # PHP-Container
-docker compose exec db mariadb ...   # Datenbank
-docker compose up -d                 # Starten
-docker compose down                  # Stoppen
+### Tech Stack
 
-# FALSCH (alt):
-docker-compose exec web php ...      # Funktioniert nicht!
+- **Backend**: PHP 8.2 mit nativer MVC-Architektur
+- **Frontend**: Responsive HTML5 mit Bootstrap 5 und AdminKit
+- **Datenbank**: MariaDB 11.4 mit JSON-Unterstützung
+- **PDF-Engine**: DomPDF für professionelle Dokumente
+- **E-Mail**: PHPMailer mit Mailpit für Development
+- **Container**: Docker mit Multi-Service-Setup
+
+### Service-Architektur
+
+```
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   Nginx         │  │   PHP-FPM       │  │   MariaDB       │
+│   Web Server    │→ │   Application   │→ │   Database      │
+│   Port 8080     │  │   Backend       │  │   Port 3307     │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+        │                      │                      │
+        ▼                      ▼                      ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   phpMyAdmin    │  │   Mailpit       │  │   Volumes       │
+│   Port 8081     │  │   Port 8025     │  │   Persistence   │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
 
-### Container-Übersicht
-| Container | Service | Port | Beschreibung |
-|-----------|---------|------|--------------|
-| app | PHP-FPM | 9000 | PHP Application Server |
-| web | Nginx | 8080 | Webserver |
-| db | MariaDB | 3307 | Datenbank |
-| phpmyadmin | phpMyAdmin | 8081 | Datenbank-GUI |
-| mailpit | MailPit | 8025/1025 | E-Mail Testing |
+## 📋 Features
+
+### 🧙‍♂️ Protokoll-Wizard
+
+- **Step-by-Step Guidance**: Geführte Protokoll-Erstellung
+- **Alle Protokolltypen**: Einzug, Auszug, Zwischenprotokoll
+- **Responsive Interface**: Funktioniert auf allen Geräten
+- **Auto-Save**: Automatische Zwischenspeicherung
+- **Validation**: Eingabevalidierung und Fehlerbehandlung
+
+### 📊 Objekt- & Einheitenverwaltung
+
+- **Portfolio-Management**: Mehrere Objekte und Einheiten
+- **Hierarchische Structure**: Objekte → Einheiten → Protokolle
+- **Flexible Konfiguration**: Anpassbare Raum- und Zählertypen
+- **Bulk-Operations**: Massenoperationen für Effizienz
+
+### 📄 Protokoll-Management
+
+- **Vollständige CRUD-Operationen**: Erstellen, Lesen, Aktualisieren, Löschen
+- **Rich Editor**: Umfangreiche Bearbeitungsmöglichkeiten
+- **Tab-basierte UI**: Übersichtliche Kategorisierung
+- **Änderungshistorie**: Vollständige Audit-Trails
+- **Status-Management**: Workflow-Unterstützung
+
+### 🔒 Sicherheit & Compliance
+
+- **Authentifizierung**: Sicheres Login-System
+- **CSRF-Protection**: Schutz vor Cross-Site-Request-Forgery
+- **Input-Sanitization**: Umfassende Eingabebereinigung
+- **SQL-Injection-Schutz**: Prepared Statements
+- **Data Encryption**: Sichere Datenübertragung
+
+## 🗂️ Projekt-Struktur
+
+```
+wohnungsuebergabe/
+├── 📁 backend/                    # PHP-Backend
+│   ├── 📁 src/                    # Source Code
+│   │   ├── 📁 Controllers/        # MVC Controller
+│   │   ├── 📁 Config/             # Konfiguration
+│   │   └── 📄 *.php              # Core Classes
+│   ├── 📁 public/                 # Web Root
+│   └── 📄 composer.json          # Dependencies
+├── 📁 docker/                     # Docker Configuration
+│   ├── 📁 nginx/                 # Nginx Config
+│   └── 📁 php/                   # PHP Dockerfile
+├── 📁 migrations/                 # Database Migrations
+├── 📁 docs/                      # Documentation
+├── 📄 docker-compose.yml         # Service Definition
+└── 📄 README.md                  # This File
+```
 
 ## 🔧 Konfiguration
 
-### Datenbank
-- **Host:** db (intern) / localhost:3307 (extern)
-- **Datenbank:** app
-- **Benutzer:** root
-- **Passwort:** root
+### Umgebungsvariablen
 
-### E-Mail Testing
-- **SMTP-Host:** mailpit
-- **SMTP-Port:** 1025
-- **Web-Interface:** http://localhost:8025
-
-## 📖 Verwendung
-
-### Neues Protokoll erstellen
-1. Login unter http://localhost:8080/login
-2. Menü → Protokolle
-3. "Neues Protokoll" klicken
-4. Typ wählen (Einzug/Auszug/Zwischenprotokoll)
-5. Daten erfassen und speichern
-6. PDF generieren (Tab "PDF-Versionen")
-7. Events prüfen (Tab "Protokoll")
-
-### Event-Tracking
-Alle Aktionen werden automatisch protokolliert:
-- Protokoll erstellt/bearbeitet
-- Type geändert
-- PDF generiert
-- E-Mail versendet
-
-## 🚨 Fehlerbehebung
-
-### Problem: "Data truncated for column 'type'"
 ```bash
-docker compose exec app php quick_fix.php
+# Database
+DB_HOST=db
+DB_NAME=app
+DB_USER=app  
+DB_PASS=app
+
+# Application
+APP_ENV=dev
+APP_DEBUG=true
+APP_URL=http://localhost:8080
+
+# Mail (Development)
+MAIL_HOST=mailpit
+MAIL_PORT=1025
 ```
 
-### Problem: Keine Events werden angezeigt
+### Custom Configuration
+
+- **Settings**: `/backend/src/Config/Settings.php`
+- **Database**: `/backend/config/database.php` 
+- **Routes**: `/backend/public/index.php`
+
+## 🧪 Development
+
+### Local Development
+
 ```bash
-docker compose exec app php /var/www/html/fix_events.php
+# Services starten
+docker-compose up -d
+
+# Logs verfolgen
+docker-compose logs -f
+
+# Container betreten
+docker-compose exec app bash
+
+# Datenbank-Zugriff
+docker-compose exec db mysql -u app -p app
 ```
 
-### Problem: Docker-Befehle funktionieren nicht
-Verwenden Sie die neue Syntax mit Leerzeichen:
+### Code Style & Quality
+
 ```bash
-docker compose ...   # Richtig
-docker-compose ...   # Falsch
+# PHP Code Standards
+docker-compose exec app vendor/bin/phpcs src/
+
+# Code Linting
+docker-compose exec app composer lint
+
+# Tests (falls verfügbar)
+docker-compose exec app vendor/bin/phpunit
 ```
 
-### Problem: Container starten nicht
-```bash
-docker compose down -v
-docker compose build --no-cache
-docker compose up -d
+### Debugging
+
+- **Application Logs**: `docker-compose logs app`
+- **Database Access**: http://localhost:8081 (phpMyAdmin)
+- **E-Mail Testing**: http://localhost:8025 (Mailpit)
+- **Error Logs**: `/backend/logs/`
+
+## 📊 Database Schema
+
+### Core Tables
+
+- **`objects`**: Immobilienobjekte (Häuser/Gebäude)
+- **`units`**: Wohneinheiten (Wohnungen)
+- **`protocols`**: Übergabeprotokolle
+- **`protocol_versions`**: Versionierung
+- **`users`**: Benutzer und Authentifizierung
+- **`owners`**: Eigentümer
+- **`managers`**: Hausverwaltungen
+
+### Audit & Logging
+
+- **`system_logs`**: System-Events
+- **`protocol_events`**: Protokoll-Änderungen
+- **`email_logs`**: E-Mail-Versand
+
+## 🔄 API Endpoints
+
+### Protocol Management
+
+```
+GET    /protocols              # Protokoll-Übersicht
+GET    /protocols/edit?id=X    # Protokoll bearbeiten
+POST   /protocols/save         # Protokoll speichern
+DELETE /protocols/delete       # Protokoll löschen
+GET    /protocols/pdf?id=X     # PDF generieren
 ```
 
-## 🧪 Testing
+### Wizard
 
-### Funktionstest
-```bash
-./final_test_v2.0.5.sh
+```
+GET    /protocols/wizard/start    # Wizard starten
+POST   /protocols/wizard/step/X  # Wizard-Schritte
+POST   /protocols/wizard/finish  # Wizard abschließen
 ```
 
-### Manuelle Tests
-1. Login testen
-2. Protokoll erstellen
-3. Type "Zwischenprotokoll" setzen
-4. Events prüfen
-5. PDF generieren
+### Administration
 
-## 💾 Wartung
-
-### Backup
-```bash
-# Datenbank
-docker compose exec db mariadb-dump -uroot -proot app > backup_$(date +%Y%m%d).sql
-
-# Dateien
-tar -czf backup_files_$(date +%Y%m%d).tar.gz backend/storage/
+```
+GET    /settings/objects      # Objekt-Verwaltung
+GET    /settings/users        # Benutzer-Verwaltung
+GET    /settings/systemlogs   # System-Logs
 ```
 
-### Updates
+## 🚀 Deployment
+
+### Production Setup
+
+1. **Environment anpassen**:
+   ```bash
+   cp .env.example .env
+   # .env für Production konfigurieren
+   ```
+
+2. **SSL/HTTPS konfigurieren**:
+   ```bash
+   # Nginx SSL-Konfiguration anpassen
+   # docker/nginx/default.conf
+   ```
+
+3. **Production Services**:
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+### Backup Strategy
+
 ```bash
-git pull origin main
-docker compose exec app composer update
-docker compose restart
+# Database Backup
+docker-compose exec db mysqldump -u app -p app > backup.sql
+
+# File Backup
+tar -czf files-backup.tar.gz backend/storage/
+
+# Automated Backup
+# Cron-Job für regelmäßige Backups einrichten
 ```
 
-## 📝 Lizenz
+## 🐛 Troubleshooting
 
-MIT License - siehe LICENSE Datei
+### Häufige Probleme
 
-## 🤝 Support
+**Services starten nicht:**
+```bash
+docker-compose down
+docker-compose up -d --force-recreate
+```
 
-- **Dokumentation:** `/docs` Verzeichnis
-- **E-Mail:** kontakt@handwertig.com
-- **phpMyAdmin:** http://localhost:8081
+**Datenbank-Verbindung fehlschlägt:**
+```bash
+docker-compose logs db
+# Warten bis "ready for connections"
+```
+
+**Berechtigungsprobleme:**
+```bash
+sudo chown -R $USER:$USER backend/storage/
+chmod -R 755 backend/storage/
+```
+
+**Port bereits belegt:**
+```bash
+# Ports in docker-compose.yml anpassen
+# oder andere Services stoppen
+lsof -i :8080
+```
+
+### Debug-Modus
+
+```bash
+# Ausführliche Logs aktivieren
+export APP_DEBUG=true
+docker-compose up -d
+
+# PHP-Fehler anzeigen
+docker-compose exec app tail -f /var/log/php/error.log
+```
+
+## 🤝 Contributing
+
+### Development Workflow
+
+1. **Fork** das Repository
+2. **Branch** für Feature erstellen: `git checkout -b feature/amazing-feature`
+3. **Commit** Änderungen: `git commit -m 'Add amazing feature'`
+4. **Push** zum Branch: `git push origin feature/amazing-feature`
+5. **Pull Request** erstellen
+
+### Code Standards
+
+- PSR-4 Autoloading
+- PSR-12 Code Style
+- Comprehensive Comments
+- Security-First Approach
+- Mobile-First Design
+
+## 📄 Lizenz
+
+Dieses Projekt ist unter der MIT-Lizenz lizenziert. Siehe [LICENSE](LICENSE) für Details.
+
+## 📞 Support
+
+- **Issues**: GitHub Issues für Bugs und Feature-Requests
+- **Dokumentation**: `/docs/` Verzeichnis
+- **Wiki**: GitHub Wiki für erweiterte Dokumentation
+
+## 🏆 Features & Status
+
+| Feature | Status | Version |
+|---------|--------|---------|
+| 🏠 Objekt-Verwaltung | ✅ Stable | 1.0 |
+| 🧙‍♂️ Protokoll-Wizard | ✅ Stable | 1.0 |
+| 📄 PDF-Export | ✅ Stable | 1.0 |
+| 🔐 Authentifizierung | ✅ Stable | 1.0 |
+| 📱 Mobile Support | ✅ Stable | 1.0 |
+| 🔍 Audit-Logging | ✅ Stable | 1.0 |
+| ✍️ Digital Signatures | 🚧 Planned | 2.0 |
+| 📧 E-Mail Integration | 🚧 Development | 1.1 |
+| 🌐 Multi-Language | 📋 Backlog | 2.0 |
 
 ---
 
-**Version:** 2.0.5  
-**Status:** Production Ready  
-**Datum:** 07.09.2025  
-**Maintainer:** Handwertig DevOps
+**Entwickelt mit ❤️ für professionelle Immobilienverwaltung**
+

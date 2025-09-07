@@ -697,16 +697,45 @@ document.addEventListener("DOMContentLoaded", function() {
      * Zeigt eine vollständige Review-Übersicht aller 4 Wizard-Schritte
      * Inklusive: Grunddaten, Räume, Zählerstände, Schlüssel, Bankdaten, 
      * Kontaktdaten, Einwilligungen und digitale Unterschriften
+     * 
+     * WICHTIG: Zeigt ALLE Bereiche an, auch wenn sie leer sind, 
+     * damit Benutzer sehen können was fehlt
      */
     public function review(): void
     {
         Auth::requireAuth();
         $pdo=Database::pdo();
         $draft=(string)($_GET['draft'] ?? '');
+        
+        if (empty($draft)) {
+            Flash::add('error','Draft-ID fehlt in URL.');
+            header('Location:/protocols');
+            return;
+        }
+        
         $st=$pdo->prepare("SELECT * FROM protocol_drafts WHERE id=? AND status='draft'");
-        $st->execute([$draft]); $d=$st->fetch(PDO::FETCH_ASSOC);
-        if(!$d){ Flash::add('error','Entwurf nicht gefunden.'); header('Location:/protocols'); return; }
-        $data=json_decode((string)($d['data']??'{}'), true) ?: [];
+        $st->execute([$draft]); 
+        $d=$st->fetch(PDO::FETCH_ASSOC);
+        
+        if(!$d){ 
+            Flash::add('error','Entwurf nicht gefunden.'); 
+            header('Location:/protocols'); 
+            return; 
+        }
+        
+        // Sicherer JSON-Decode mit Fallback
+        $data = [];
+        if (!empty($d['data'])) {
+            $decoded = json_decode((string)$d['data'], true);
+            if (is_array($decoded)) {
+                $data = $decoded;
+            }
+        }
+        
+        // Debug-Logging für Troubleshooting
+        error_log('[ReviewDebug] Draft ID: ' . $draft);
+        error_log('[ReviewDebug] Raw data: ' . ($d['data'] ?? 'NULL'));
+        error_log('[ReviewDebug] Parsed data keys: ' . implode(', ', array_keys($data)));
 
         // Hole Eigentümer und Hausverwaltung Daten
         $ownerInfo = '';
@@ -804,12 +833,15 @@ document.addEventListener("DOMContentLoaded", function() {
         </div>
         
         <!-- Schritt 2: Räume -->
-        <?php if (!empty($data['rooms'])): ?>
         <div class="card mb-4">
-            <div class="card-header">
-                <h2 class="h6 mb-0"><i class="bi bi-2-circle me-2"></i>Räume (<?= count($data['rooms']) ?>)</h2>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="h6 mb-0"><i class="bi bi-2-circle me-2"></i>Räume (<?= count($data['rooms'] ?? []) ?>)</h2>
+                <a href="/protocols/wizard?step=2&draft=<?= htmlspecialchars($draft) ?>" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil me-1"></i>Bearbeiten
+                </a>
             </div>
             <div class="card-body">
+                <?php if (!empty($data['rooms'])): ?>
                 <div class="row g-3">
                     <?php foreach ($data['rooms'] as $i => $room): ?>
                     <?php if (!empty($room['name'])): ?>
@@ -817,19 +849,17 @@ document.addEventListener("DOMContentLoaded", function() {
                         <div class="border rounded p-3">
                             <h6 class="fw-bold mb-2"><?= htmlspecialchars($room['name']) ?></h6>
                             
-                            <?php if (!empty($room['state'])): ?>
-                            <p class="small mb-2"><strong>Zustand:</strong> <?= htmlspecialchars($room['state']) ?></p>
-                            <?php endif; ?>
+                            <p class="small mb-2"><strong>Zustand:</strong> <?= !empty($room['state']) ? htmlspecialchars($room['state']) : '<span class="text-muted">Nicht angegeben</span>' ?></p>
                             
-                            <?php if (!empty($room['smell'])): ?>
-                            <p class="small mb-2"><strong>Geruch:</strong> <?= htmlspecialchars($room['smell']) ?></p>
-                            <?php endif; ?>
+                            <p class="small mb-2"><strong>Geruch:</strong> <?= !empty($room['smell']) ? htmlspecialchars($room['smell']) : '<span class="text-muted">Nicht angegeben</span>' ?></p>
                             
                             <?php if (!empty($room['wmz_no']) || !empty($room['wmz_val'])): ?>
                             <p class="small mb-2"><strong>WMZ:</strong> 
                                 <?= htmlspecialchars($room['wmz_no'] ?? 'Keine Nr.') ?> 
                                 (Stand: <?= htmlspecialchars($room['wmz_val'] ?? '—') ?>)
                             </p>
+                            <?php else: ?>
+                            <p class="small mb-2"><strong>WMZ:</strong> <span class="text-muted">Nicht erfasst</span></p>
                             <?php endif; ?>
                             
                             <div class="d-flex align-items-center">
@@ -842,55 +872,85 @@ document.addEventListener("DOMContentLoaded", function() {
                     <?php endif; ?>
                     <?php endforeach; ?>
                 </div>
+                <?php else: ?>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Noch keine Räume erfasst.</strong>
+                    <p class="mb-0 mt-2">Gehen Sie zu <a href="/protocols/wizard?step=2&draft=<?= htmlspecialchars($draft) ?>" class="alert-link">Schritt 2</a> um Räume hinzuzufügen.</p>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
-        <?php endif; ?>
         
         <!-- Schritt 3: Zählerstände -->
-        <?php 
-        $hasMeters = false;
-        if (!empty($data['meters'])) {
-            foreach ($data['meters'] as $meter) {
-                if (!empty($meter['no']) || !empty($meter['val'])) {
-                    $hasMeters = true;
-                    break;
-                }
-            }
-        }
-        ?>
-        <?php if ($hasMeters): ?>
         <div class="card mb-4">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h2 class="h6 mb-0"><i class="bi bi-3-circle me-2"></i>Zählerstände</h2>
+                <a href="/protocols/wizard?step=3&draft=<?= htmlspecialchars($draft) ?>" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil me-1"></i>Bearbeiten
+                </a>
             </div>
             <div class="card-body">
+                <?php 
+                $meters = $data['meters'] ?? [];
+                $hasAnyMeterData = false;
+                if (!empty($meters)) {
+                    foreach ($meters as $meter) {
+                        if (!empty($meter['no']) || !empty($meter['val'])) {
+                            $hasAnyMeterData = true;
+                            break;
+                        }
+                    }
+                }
+                ?>
+                
                 <div class="row g-3">
-                    <?php foreach ($data['meters'] as $key => $meter): ?>
-                    <?php if (!empty($meter['no']) || !empty($meter['val'])): ?>
+                    <?php foreach ($meterLabels as $key => $label): ?>
+                    <?php $meter = $meters[$key] ?? []; ?>
                     <div class="col-md-6 col-lg-4">
-                        <div class="border rounded p-3">
-                            <h6 class="fw-bold mb-2"><?= htmlspecialchars($meterLabels[$key] ?? $key) ?></h6>
-                            <p class="small mb-1"><strong>Nummer:</strong> <?= htmlspecialchars($meter['no'] ?? '—') ?></p>
-                            <p class="small mb-0"><strong>Stand:</strong> <?= htmlspecialchars($meter['val'] ?? '—') ?></p>
+                        <div class="border rounded p-3 <?= (empty($meter['no']) && empty($meter['val'])) ? 'bg-light' : '' ?>">
+                            <h6 class="fw-bold mb-2"><?= htmlspecialchars($label) ?></h6>
+                            <p class="small mb-1">
+                                <strong>Nummer:</strong> 
+                                <?= !empty($meter['no']) ? htmlspecialchars($meter['no']) : '<span class="text-muted">Nicht angegeben</span>' ?>
+                            </p>
+                            <p class="small mb-0">
+                                <strong>Stand:</strong> 
+                                <?= !empty($meter['val']) ? htmlspecialchars($meter['val']) : '<span class="text-muted">Nicht angegeben</span>' ?>
+                            </p>
+                            <?php if (empty($meter['no']) && empty($meter['val'])): ?>
+                            <div class="mt-2">
+                                <span class="badge bg-light text-dark"><i class="bi bi-clock"></i> Noch zu erfassen</span>
+                            </div>
+                            <?php endif; ?>
                         </div>
                     </div>
-                    <?php endif; ?>
                     <?php endforeach; ?>
                 </div>
+                
+                <?php if (!$hasAnyMeterData): ?>
+                <div class="alert alert-warning mt-3">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Noch keine Zählerstände erfasst.</strong>
+                    <p class="mb-0 mt-2">Gehen Sie zu <a href="/protocols/wizard?step=3&draft=<?= htmlspecialchars($draft) ?>" class="alert-link">Schritt 3</a> um Zählerstände einzutragen.</p>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
-        <?php endif; ?>
         
         <!-- Schritt 4: Schlüssel & weitere Angaben -->
         <div class="card mb-4">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h2 class="h6 mb-0"><i class="bi bi-4-circle me-2"></i>Schlüssel & weitere Angaben</h2>
+                <a href="/protocols/wizard?step=4&draft=<?= htmlspecialchars($draft) ?>" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil me-1"></i>Bearbeiten
+                </a>
             </div>
             <div class="card-body">
                 
                 <!-- Schlüssel -->
-                <?php if (!empty($data['keys'])): ?>
                 <h6 class="mb-3">Schlüssel</h6>
+                <?php if (!empty($data['keys'])): ?>
                 <div class="row g-2 mb-4">
                     <?php foreach ($data['keys'] as $key): ?>
                     <?php if (!empty($key['label'])): ?>
@@ -900,61 +960,73 @@ document.addEventListener("DOMContentLoaded", function() {
                             <div class="small text-muted">Anzahl: <?= (int)($key['qty'] ?? 1) ?></div>
                             <?php if (!empty($key['no'])): ?>
                             <div class="small text-muted">Nr.: <?= htmlspecialchars($key['no']) ?></div>
+                            <?php else: ?>
+                            <div class="small text-muted">Nr.: <span class="text-muted">Nicht angegeben</span></div>
                             <?php endif; ?>
                         </div>
                     </div>
                     <?php endif; ?>
                     <?php endforeach; ?>
                 </div>
+                <?php else: ?>
+                <div class="alert alert-warning mb-4">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Noch keine Schlüssel erfasst.</strong>
+                    <p class="mb-0 mt-2">Gehen Sie zu <a href="/protocols/wizard?step=4&draft=<?= htmlspecialchars($draft) ?>" class="alert-link">Schritt 4</a> um Schlüssel hinzuzufügen.</p>
+                </div>
                 <?php endif; ?>
                 
                 <!-- Bankdaten -->
+                <h6 class="mb-3">Bankverbindung</h6>
                 <?php 
                 $bank = $data['meta']['bank'] ?? [];
-                if (!empty($bank['bank']) || !empty($bank['iban']) || !empty($bank['holder'])):
+                $hasBankData = !empty($bank['bank']) || !empty($bank['iban']) || !empty($bank['holder']);
                 ?>
-                <h6 class="mb-3">Bankverbindung</h6>
+                <?php if ($hasBankData): ?>
                 <div class="row g-3 mb-4">
-                    <?php if (!empty($bank['bank'])): ?>
                     <div class="col-md-4">
                         <div class="small text-muted">Bank</div>
-                        <div><?= htmlspecialchars($bank['bank']) ?></div>
+                        <div><?= !empty($bank['bank']) ? htmlspecialchars($bank['bank']) : '<span class="text-muted">Nicht angegeben</span>' ?></div>
                     </div>
-                    <?php endif; ?>
-                    <?php if (!empty($bank['iban'])): ?>
                     <div class="col-md-4">
                         <div class="small text-muted">IBAN</div>
-                        <div><?= htmlspecialchars($bank['iban']) ?></div>
+                        <div><?= !empty($bank['iban']) ? htmlspecialchars($bank['iban']) : '<span class="text-muted">Nicht angegeben</span>' ?></div>
                     </div>
-                    <?php endif; ?>
-                    <?php if (!empty($bank['holder'])): ?>
                     <div class="col-md-4">
                         <div class="small text-muted">Kontoinhaber</div>
-                        <div><?= htmlspecialchars($bank['holder']) ?></div>
+                        <div><?= !empty($bank['holder']) ? htmlspecialchars($bank['holder']) : '<span class="text-muted">Nicht angegeben</span>' ?></div>
                     </div>
-                    <?php endif; ?>
+                </div>
+                <?php else: ?>
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Keine Bankdaten erfasst.</strong>
+                    <p class="mb-0 mt-2">Für Kautionsrückzahlungen können Sie in <a href="/protocols/wizard?step=4&draft=<?= htmlspecialchars($draft) ?>" class="alert-link">Schritt 4</a> Bankdaten hinterlegen.</p>
                 </div>
                 <?php endif; ?>
                 
                 <!-- Kontaktdaten -->
+                <h6 class="mb-3">Kontaktdaten</h6>
                 <?php 
                 $contact = $data['meta']['tenant_contact'] ?? [];
-                if (!empty($contact['email']) || !empty($contact['phone'])):
+                $hasContactData = !empty($contact['email']) || !empty($contact['phone']);
                 ?>
-                <h6 class="mb-3">Kontaktdaten</h6>
+                <?php if ($hasContactData): ?>
                 <div class="row g-3 mb-4">
-                    <?php if (!empty($contact['email'])): ?>
                     <div class="col-md-6">
                         <div class="small text-muted">E-Mail</div>
-                        <div><?= htmlspecialchars($contact['email']) ?></div>
+                        <div><?= !empty($contact['email']) ? htmlspecialchars($contact['email']) : '<span class="text-muted">Nicht angegeben</span>' ?></div>
                     </div>
-                    <?php endif; ?>
-                    <?php if (!empty($contact['phone'])): ?>
                     <div class="col-md-6">
                         <div class="small text-muted">Telefon</div>
-                        <div><?= htmlspecialchars($contact['phone']) ?></div>
+                        <div><?= !empty($contact['phone']) ? htmlspecialchars($contact['phone']) : '<span class="text-muted">Nicht angegeben</span>' ?></div>
                     </div>
-                    <?php endif; ?>
+                </div>
+                <?php else: ?>
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Keine Kontaktdaten erfasst.</strong>
+                    <p class="mb-0 mt-2">In <a href="/protocols/wizard?step=4&draft=<?= htmlspecialchars($draft) ?>" class="alert-link">Schritt 4</a> können Sie E-Mail und Telefonnummer hinterlegen.</p>
                 </div>
                 <?php endif; ?>
                 

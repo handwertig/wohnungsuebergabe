@@ -112,7 +112,7 @@ final class ProtocolsController
             return match($type) {
                 'einzug' => '<span class="badge bg-success">Einzug</span>',
                 'auszug' => '<span class="badge bg-danger">Auszug</span>',
-                'zwischenprotokoll', 'zwischen' => '<span class="badge bg-warning text-dark">Zwischenprotokoll</span>',
+                'zwischen', 'zwischenprotokoll' => '<span class="badge bg-warning text-dark">Zwischenprotokoll</span>',
                 default => '<span class="badge bg-secondary">' . ucfirst($type) . '</span>'
             };
         };
@@ -131,7 +131,7 @@ final class ProtocolsController
               <option value="">— Art (alle) —</option>
               <option value="einzug"   <?= $type==='einzug'?'selected':'' ?>>Einzugsprotokoll</option>
               <option value="auszug"   <?= $type==='auszug'?'selected':'' ?>>Auszugsprotokoll</option>
-              <option value="zwischen" <?= $type==='zwischen'?'selected':'' ?>>Zwischenprotokoll</option>
+              <option value="zwischenprotokoll" <?= $type==='zwischenprotokoll'?'selected':'' ?>>Zwischenprotokoll</option>
             </select>
           </div>
           <div class="col-md-2"><input class="form-control" type="date" name="from" value="<?= $h($from) ?>" placeholder="ab"></div>
@@ -1087,7 +1087,7 @@ final class ProtocolsController
         $typeLabel = match($protocol['type']) {
             'einzug' => 'Einzugsprotokoll',
             'auszug' => 'Auszugsprotokoll', 
-            'zwischenprotokoll' => 'Zwischenprotokoll',
+            'zwischen', 'zwischenprotokoll' => 'Zwischenprotokoll',
             default => 'Wohnungsübergabeprotokoll'
         };
         
