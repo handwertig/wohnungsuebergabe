@@ -1049,8 +1049,6 @@ final class SettingsController
         
         // Inline CSS nur für diese Seite
         $body .= '<style>';
-        $body .= '.systemlog-header { background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%); border-radius: var(--adminkit-border-radius-lg); position: relative; }';
-        $body .= '.systemlog-header::before { content: ""; position: absolute; top: 10px; left: 15px; width: 12px; height: 12px; border-radius: 50%; background: #ff5f56; box-shadow: 20px 0 #ffbd2e, 40px 0 #27ca3f; }';
         $body .= '.systemlog-table { font-family: "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace; font-size: 0.8rem; line-height: 1.3; }';
         $body .= '.systemlog-table td { padding: 0.4rem 0.6rem !important; vertical-align: middle; border-bottom: 1px solid rgba(0,0,0,0.05); }';
         $body .= '.systemlog-table tbody tr:hover { background-color: rgba(59, 130, 246, 0.05); transform: translateX(2px); transition: all 0.15s ease; }';
@@ -1065,26 +1063,7 @@ final class SettingsController
         $body .= '.systemlog-table .badge.action-generated { background: #7c3aed !important; }';
         $body .= '.systemlog-table .badge.action-exported { background: #ea580c !important; }';
         $body .= '.systemlog-pagination { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: var(--adminkit-border-radius-lg); font-family: "Menlo", "Monaco", "Consolas", monospace; }';
-        $body .= '.status-online::before { content: ""; width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; animation: pulse 2s infinite; margin-right: 0.25rem; }';
-        $body .= '@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }';
-        $body .= '.live-indicator { position: relative; overflow: hidden; }';
-        $body .= '.live-indicator::after { content: ""; position: absolute; top: 0; left: -100%; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, #10b981, transparent); animation: sweep 3s infinite; }';
-        $body .= '@keyframes sweep { 0% { left: -100%; } 100% { left: 100%; } }';
         $body .= '</style>';
-        
-        // Technischer Header
-        $body .= '<div class="bg-dark text-white p-3 rounded mb-3 systemlog-header live-indicator">';
-        $body .= '<div class="d-flex justify-content-between align-items-center">';
-        $body .= '<div>';
-        $body .= '<h1 class="h6 mb-1"><i class="bi bi-terminal me-2"></i>System Audit Log</h1>';
-        $body .= '<small class="opacity-75">Comprehensive system activity tracking & monitoring</small>';
-        $body .= '</div>';
-        $body .= '<div class="font-monospace small">';
-        $body .= '<span class="badge bg-success me-2 status-online">ONLINE</span>';
-        $body .= 'Records: <strong>'.$totalCount.'</strong>';
-        $body .= '</div>';
-        $body .= '</div>';
-        $body .= '</div>';
         
         // Kompakte Filterleiste
         $body .= '<div class="card mb-3">';
