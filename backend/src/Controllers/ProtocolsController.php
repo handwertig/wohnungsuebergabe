@@ -8,6 +8,7 @@ use App\Database;
 use App\View;
 use App\Flash;
 use App\Csrf;
+use App\Settings;
 use PDO;
 
 final class ProtocolsController
