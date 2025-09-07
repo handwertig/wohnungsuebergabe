@@ -14,6 +14,67 @@ final class ProtocolWizardController
     private function h($v){ return htmlspecialchars((string)$v, ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
     
     /**
+     * Generiert das Signatur-Script HTML (nur einmal pro Seite)
+     */
+    private function getSignatureScript(): string
+    {
+        return '
+        <!-- Signature Pad Integration -->
+        <script src="/assets/signature-pad.js"></script>
+        <script>
+        if (typeof window.signatureInitialized === "undefined") {
+            window.signatureInitialized = true;
+            let signaturePad = null;
+            let currentTarget = null;
+            
+            window.openSignatureDialog = function(target) {
+                currentTarget = target;
+                const modal = new bootstrap.Modal(document.getElementById("signatureModal"));
+                modal.show();
+                
+                if (!signaturePad) {
+                    signaturePad = new SignaturePad("signatureCanvas", {
+                        strokeStyle: "#000033",
+                        lineWidth: 2
+                    });
+                    
+                    document.getElementById("clearSignature").addEventListener("click", function() {
+                        signaturePad.clear();
+                    });
+                    
+                    document.getElementById("saveModalSignature").addEventListener("click", function() {
+                        if (signaturePad.isEmpty()) {
+                            alert("Bitte unterschreiben Sie zuerst.");
+                            return;
+                        }
+                        
+                        const dataURL = signaturePad.toDataURL();
+                        document.getElementById("signature_" + currentTarget).value = dataURL;
+                        
+                        const previewContainer = document.querySelector("#signature_" + currentTarget).closest(".card").querySelector(".text-muted.mb-3, img");
+                        if (previewContainer) {
+                            const imgHtml = `<img src="${dataURL}" class="img-fluid mb-2" style="max-height: 60px;"><p class="small text-muted mb-2">Unterzeichnet</p>`;
+                            previewContainer.parentElement.innerHTML = imgHtml + `<button type="button" class="btn btn-sm btn-outline-primary" onclick="openSignatureDialog(\'${currentTarget}\')"><i class="bi bi-pen me-1"></i>Ändern</button>`;
+                        }
+                        
+                        const button = document.querySelector(`button[onclick="openSignatureDialog(\'${currentTarget}\')"]`);
+                        if (button) {
+                            button.innerHTML = `<i class="bi bi-pen me-1"></i>Ändern`;
+                        }
+                        
+                        bootstrap.Modal.getInstance(document.getElementById("signatureModal")).hide();
+                        signaturePad.clear();
+                    });
+                }
+                
+                signaturePad.clear();
+            };
+        }
+        </script>
+        ';
+    }
+    
+    /**
      * Generiert das Signatur-Modal HTML
      */
     private function getSignatureModal(): string
@@ -49,68 +110,6 @@ final class ProtocolWizardController
                 </div>
             </div>
         </div>
-        
-        <!-- Signature Pad Integration -->
-        <script src="/assets/signature-pad.js"></script>
-        <script>
-        let signaturePad = null;
-        let currentTarget = null;
-        
-        function openSignatureDialog(target) {
-            currentTarget = target;
-            const modal = new bootstrap.Modal(document.getElementById("signatureModal"));
-            modal.show();
-            
-            // Initialize signature pad if not already done
-            if (!signaturePad) {
-                signaturePad = new SignaturePad("signatureCanvas", {
-                    strokeStyle: "#000033",
-                    lineWidth: 2
-                });
-                
-                // Clear button
-                document.getElementById("clearSignature").addEventListener("click", function() {
-                    signaturePad.clear();
-                });
-                
-                // Save button
-                document.getElementById("saveModalSignature").addEventListener("click", function() {
-                    if (signaturePad.isEmpty()) {
-                        alert("Bitte unterschreiben Sie zuerst.");
-                        return;
-                    }
-                    
-                    const dataURL = signaturePad.toDataURL();
-                    
-                    // Save to hidden field
-                    document.getElementById("signature_" + currentTarget).value = dataURL;
-                    
-                    // Update preview
-                    const previewContainer = document.querySelector("#signature_" + currentTarget).closest(".card").querySelector(".text-muted.mb-3, img");
-                    if (previewContainer) {
-                        const imgHtml = \'<img src="\' + dataURL + \'" class="img-fluid mb-2" style="max-height: 60px;">\' +
-                                       \'<p class="small text-muted mb-2">Unterzeichnet</p>\';
-                        previewContainer.parentElement.innerHTML = imgHtml + 
-                            \'<button type="button" class="btn btn-sm btn-outline-primary" onclick="openSignatureDialog(\\\'\'+ currentTarget + \'\\\')">\'  +
-                            \'<i class="bi bi-pen me-1"></i>Ändern</button>\';
-                    }
-                    
-                    // Update button text
-                    const button = document.querySelector("button[onclick=\"openSignatureDialog(\'" + currentTarget + "\')\"]" );
-                    if (button) {
-                        button.innerHTML = \'<i class="bi bi-pen me-1"></i>Ändern\';
-                    }
-                    
-                    // Close modal
-                    bootstrap.Modal.getInstance(document.getElementById("signatureModal")).hide();
-                    signaturePad.clear();
-                });
-            }
-            
-            // Clear pad for new signature
-            signaturePad.clear();
-        }
-        </script>
         ';
     }
 
@@ -268,7 +267,7 @@ final class ProtocolWizardController
             $html .= '<div class="d-flex justify-content-between mt-2"><a class="btn btn-ghost" href="/protocols/wizard?step=2&draft='.$this->h($draft).'"><i class="bi bi-arrow-left"></i> Zurück</a><button class="btn btn-primary btn-lg">Weiter</button></div>';
         }
 
-        /* ------------------ Schritt 4: Bank + Dritte Person + Einwilligungen + DocuSign ------------------ */
+        /* ------------------ Schritt 4: Schlüssel + Bank + Dritte Person + Einwilligungen + DocuSign ------------------ */
         if ($step===4) {
             $meta = (array)($data['meta'] ?? ['consents'=>[]]);
             $cons = (array)($meta['consents'] ?? []);
@@ -281,7 +280,157 @@ final class ProtocolWizardController
             $tc  =(array)($meta['tenant_contact'] ?? ['email'=>'','phone'=>'']);
             $na  =(array)($meta['tenant_new_addr'] ?? ['street'=>'','house_no'=>'','postal_code'=>'','city'=>'']);
             $third=(string)($meta['third_attendee'] ?? '');
+            $keys = (array)($data['keys'] ?? []);
 
+            // SCHLÜSSEL-SEKTION
+            $html .= '<h2 class="h6 mb-3">Schlüssel</h2>';
+            $html .= '<div class="d-flex justify-content-between align-items-center mb-2">';
+            $html .= '<span class="text-muted small">Erfassen Sie alle übergebenen Schlüssel</span>';
+            $html .= '<button type="button" id="add-key" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Schlüssel hinzufügen</button>';
+            $html .= '</div>';
+            
+            if (empty($keys)) {
+                $html .= '<div class="alert alert-info" id="no-keys-info">';
+                $html .= '<i class="bi bi-info-circle me-2"></i>';
+                $html .= 'Noch keine Schlüssel erfasst. Verwenden Sie den Button oben, um Schlüssel hinzuzufügen.';
+                $html .= '</div>';
+            }
+            
+            $html .= '<div id="keys-container">';
+            $keyIndex = 0;
+            foreach ($keys as $key) {
+                $keyIndex++;
+                $html .= '<div class="card mb-2 key-item">';
+                $html .= '<div class="card-body">';
+                $html .= '<div class="row g-3 align-items-center">';
+                $html .= '<div class="col-md-4">';
+                $html .= '<label class="form-label">Bezeichnung</label>';
+                $html .= '<input class="form-control" name="keys[' . $keyIndex . '][label]" value="' . $this->h($key['label'] ?? '') . '" placeholder="z.B. Haustür, Wohnung, Keller">';
+                $html .= '</div>';
+                $html .= '<div class="col-md-3">';
+                $html .= '<label class="form-label">Anzahl</label>';
+                $html .= '<input class="form-control" type="number" min="1" name="keys[' . $keyIndex . '][qty]" value="' . $this->h($key['qty'] ?? 1) . '">';
+                $html .= '</div>';
+                $html .= '<div class="col-md-3">';
+                $html .= '<label class="form-label">Schlüssel-Nr.</label>';
+                $html .= '<input class="form-control" name="keys[' . $keyIndex . '][no]" value="' . $this->h($key['no'] ?? '') . '" placeholder="Optional">';
+                $html .= '</div>';
+                $html .= '<div class="col-md-2 d-flex align-items-end">';
+                $html .= '<button type="button" class="btn btn-outline-danger btn-sm remove-key w-100">';
+                $html .= '<i class="bi bi-trash"></i> Entfernen';
+                $html .= '</button>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+                $html .= '</div>';
+            }
+            $html .= '</div>';
+            
+            // Template für neue Schlüssel
+            $html .= '<template id="key-template">';
+            $html .= '<div class="card mb-2 key-item">';
+            $html .= '<div class="card-body">';
+            $html .= '<div class="row g-3 align-items-center">';
+            $html .= '<div class="col-md-4">';
+            $html .= '<label class="form-label">Bezeichnung</label>';
+            $html .= '<input class="form-control" name="keys[__IDX__][label]" placeholder="z.B. Haustür, Wohnung, Keller">';
+            $html .= '</div>';
+            $html .= '<div class="col-md-3">';
+            $html .= '<label class="form-label">Anzahl</label>';
+            $html .= '<input class="form-control" type="number" min="1" name="keys[__IDX__][qty]" value="1">';
+            $html .= '</div>';
+            $html .= '<div class="col-md-3">';
+            $html .= '<label class="form-label">Schlüssel-Nr.</label>';
+            $html .= '<input class="form-control" name="keys[__IDX__][no]" placeholder="Optional">';
+            $html .= '</div>';
+            $html .= '<div class="col-md-2 d-flex align-items-end">';
+            $html .= '<button type="button" class="btn btn-outline-danger btn-sm remove-key w-100">';
+            $html .= '<i class="bi bi-trash"></i> Entfernen';
+            $html .= '</button>';
+            $html .= '</div>';
+            $html .= '</div>';
+            $html .= '</div>';
+            $html .= '</div>';
+            $html .= '</template>';
+            
+            // JavaScript für Schlüssel-Management
+            $html .= '
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var addBtn = document.getElementById("add-key");
+  var container = document.getElementById("keys-container");
+  var template = document.getElementById("key-template");
+  var noKeysInfo = document.getElementById("no-keys-info");
+  
+  console.log("Schlüssel-Management initialisiert", {addBtn: addBtn, container: container, template: template, noKeysInfo: noKeysInfo});
+  
+  function getNextIndex() {
+    var max = 0;
+    var inputs = document.querySelectorAll("[name^=\\"keys[\\"][name$=\\"[label]\\"]");
+    inputs.forEach(function(input) {
+      var match = input.name.match(/^keys\\[(\\d+)\\]/);
+      if (match) {
+        var num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    });
+    return max + 1;
+  }
+  
+  function wireRemove() {
+    var removeButtons = document.querySelectorAll(".remove-key");
+    removeButtons.forEach(function(btn) {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = "true";
+      btn.addEventListener("click", function() {
+        var keyItem = btn.closest(".key-item");
+        if (keyItem) {
+          keyItem.remove();
+          var remainingKeys = container.querySelectorAll(".key-item");
+          if (remainingKeys.length === 0 && noKeysInfo) {
+            noKeysInfo.style.display = "block";
+          }
+        }
+      });
+    });
+  }
+  
+  // Bestehende Remove-Buttons verknüpfen
+  wireRemove();
+  
+  // Add-Button Event
+  if (addBtn && template && container) {
+    addBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      console.log("Schlüssel hinzufügen geklickt");
+      
+      var idx = getNextIndex();
+      console.log("Nächster Index:", idx);
+      
+      var templateContent = template.innerHTML;
+      var newContent = templateContent.replace(/__IDX__/g, String(idx));
+      
+      var tempDiv = document.createElement("div");
+      tempDiv.innerHTML = newContent;
+      var newElement = tempDiv.firstElementChild;
+      
+      container.appendChild(newElement);
+      wireRemove();
+      
+      // Info-Box verstecken
+      if (noKeysInfo) {
+        noKeysInfo.style.display = "none";
+      }
+      
+      console.log("Schlüssel hinzugefügt");
+    });
+  } else {
+    console.error("Erforderliche Elemente nicht gefunden:", {addBtn: addBtn, template: template, container: container});
+  }
+});
+</script>';
+            
+            $html .= '<hr class="my-4">';
             $html .= '<h2 class="h6 mb-2">Weitere Angaben</h2>';
             $html .= '<div class="alert alert-info small">Die Angabe der Bankverbindung dient zur Rückzahlung einer Mietkaution. Siehe hierzu die Angaben im Mietvertrag und Hinweise im Protokoll.</div>';
             if (!empty($kh['title']) || !empty($kh['content'])) {
@@ -403,8 +552,9 @@ final class ProtocolWizardController
                 
                 $html .= '</div>';
                 
-                // Signature Modal
+                // Signature Modal und Script
                 $html .= $this->getSignatureModal();
+                $html .= $this->getSignatureScript();
                 
             } else {
                 // DocuSign Integration (Platzhalter)
@@ -543,6 +693,11 @@ final class ProtocolWizardController
         Flash::add('error','Unbekannter Schritt.'); header('Location:/protocols');
     }
 
+    /**
+     * Zeigt eine vollständige Review-Übersicht aller 4 Wizard-Schritte
+     * Inklusive: Grunddaten, Räume, Zählerstände, Schlüssel, Bankdaten, 
+     * Kontaktdaten, Einwilligungen und digitale Unterschriften
+     */
     public function review(): void
     {
         Auth::requireAuth();
@@ -553,78 +708,432 @@ final class ProtocolWizardController
         if(!$d){ Flash::add('error','Entwurf nicht gefunden.'); header('Location:/protocols'); return; }
         $data=json_decode((string)($d['data']??'{}'), true) ?: [];
 
-        $unitTitle='—';
-        if (!empty($d['unit_id'])) {
-            $q=$pdo->prepare("SELECT u.label,o.city,o.street,o.house_no FROM units u JOIN objects o ON o.id=u.object_id WHERE u.id=?");
-            $q->execute([$d['unit_id']]); if($r=$q->fetch(PDO::FETCH_ASSOC)){
-                $unitTitle=$r['city'].', '.$r['street'].' '.$r['house_no'].' – '.$r['label'];
+        // Hole Eigentümer und Hausverwaltung Daten
+        $ownerInfo = '';
+        $managerInfo = '';
+        
+        if (!empty($d['owner_id'])) {
+            $q=$pdo->prepare("SELECT name, company, address, email, phone FROM owners WHERE id=?");
+            $q->execute([$d['owner_id']]);
+            if($r=$q->fetch(PDO::FETCH_ASSOC)){
+                $ownerInfo = $r['name'];
+                if (!empty($r['company'])) $ownerInfo .= ' (' . $r['company'] . ')';
+                if (!empty($r['address'])) $ownerInfo .= ', ' . $r['address'];
+                if (!empty($r['email'])) $ownerInfo .= ', ' . $r['email'];
+                if (!empty($r['phone'])) $ownerInfo .= ', ' . $r['phone'];
+            }
+        } elseif (!empty($data['owner'])) {
+            $owner = $data['owner'];
+            $ownerInfo = $owner['name'] ?? '';
+            if (!empty($owner['company'])) $ownerInfo .= ' (' . $owner['company'] . ')';
+            if (!empty($owner['address'])) $ownerInfo .= ', ' . $owner['address'];
+            if (!empty($owner['email'])) $ownerInfo .= ', ' . $owner['email'];
+            if (!empty($owner['phone'])) $ownerInfo .= ', ' . $owner['phone'];
+        }
+        
+        if (!empty($d['manager_id'])) {
+            $q=$pdo->prepare("SELECT name, company FROM managers WHERE id=?");
+            $q->execute([$d['manager_id']]);
+            if($r=$q->fetch(PDO::FETCH_ASSOC)){
+                $managerInfo = $r['name'];
+                if (!empty($r['company'])) $managerInfo .= ' (' . $r['company'] . ')';
             }
         }
 
-        ob_start(); ?>
-        <h1 class="h5 mb-3">Review</h1>
-        <dl class="row">
-          <dt class="col-sm-3">Wohneinheit</dt><dd class="col-sm-9"><?= htmlspecialchars($unitTitle) ?></dd>
-          <dt class="col-sm-3">Art</dt><dd class="col-sm-9"><?= htmlspecialchars(($d['type']==='einzug'?'Einzugsprotokoll':($d['type']==='auszug'?'Auszugsprotokoll':'Zwischenabnahme'))) ?></dd>
-          <dt class="col-sm-3">Mieter</dt><dd class="col-sm-9"><?= htmlspecialchars((string)($d['tenant_name'] ?? '')) ?></dd>
-          <dt class="col-sm-3">Zeitstempel</dt><dd class="col-sm-9"><?= htmlspecialchars((string)($data['timestamp'] ?? '')) ?></dd>
-        </dl>
+        $unitTitle='—';
+        if (!empty($d['unit_id'])) {
+            $q=$pdo->prepare("SELECT u.label,u.floor,o.city,o.postal_code,o.street,o.house_no FROM units u JOIN objects o ON o.id=u.object_id WHERE u.id=?");
+            $q->execute([$d['unit_id']]); if($r=$q->fetch(PDO::FETCH_ASSOC)){
+                $unitTitle = '';
+                if (!empty($r['postal_code'])) $unitTitle .= $r['postal_code'] . ' ';
+                $unitTitle .= $r['city'] . ', ' . $r['street'] . ' ' . $r['house_no'];
+                if (!empty($r['label'])) $unitTitle .= ' – ' . $r['label'];
+                if (!empty($r['floor'])) $unitTitle .= ' (Etage: ' . $r['floor'] . ')';
+            }
+        }
         
-        <?php if (!empty($data['signatures'])): ?>
-        <h2 class="h6 mt-3">Unterschriften</h2>
-        <div class="row g-2">
-          <?php if (!empty($data['signatures']['tenant'])): ?>
-          <div class="col-md-4">
-            <div class="card">
-              <div class="card-body text-center">
-                <h6 class="card-title">Mieter</h6>
-                <img src="<?= htmlspecialchars($data['signatures']['tenant']) ?>" class="img-fluid" style="max-height: 60px;">
-                <p class="small text-muted mb-0"><?= htmlspecialchars($data['signatures']['tenant_name'] ?? '') ?></p>
-              </div>
+        // Meter-Labels
+        $meterLabels = [
+            'strom_we' => 'Strom (Wohneinheit)',
+            'strom_allg' => 'Strom (Haus allgemein)',
+            'gas_we' => 'Gas (Wohneinheit)',
+            'gas_allg' => 'Gas (Haus allgemein)',
+            'wasser_kueche_kalt' => 'Wasser Küche (kalt)',
+            'wasser_kueche_warm' => 'Wasser Küche (warm)',
+            'wasser_bad_kalt' => 'Wasser Bad (kalt)',
+            'wasser_bad_warm' => 'Wasser Bad (warm)',
+            'wasser_wm' => 'Wasser Waschmaschine (blau)'
+        ];
+
+        ob_start(); ?>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h4 mb-0">Protokoll-Review</h1>
+            <div class="text-muted small">Bitte prüfen Sie alle Angaben vor dem Abschluss</div>
+        </div>
+        
+        <!-- Schritt 1: Grunddaten -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="h6 mb-0"><i class="bi bi-1-circle me-2"></i>Grunddaten & Adresse</h2>
             </div>
-          </div>
-          <?php endif; ?>
-          <?php if (!empty($data['signatures']['landlord'])): ?>
-          <div class="col-md-4">
-            <div class="card">
-              <div class="card-body text-center">
-                <h6 class="card-title">Eigentümer/Vermieter</h6>
-                <img src="<?= htmlspecialchars($data['signatures']['landlord']) ?>" class="img-fluid" style="max-height: 60px;">
-                <p class="small text-muted mb-0"><?= htmlspecialchars($data['signatures']['landlord_name'] ?? '') ?></p>
-              </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Wohneinheit</dt>
+                    <dd class="col-sm-9"><?= htmlspecialchars($unitTitle) ?></dd>
+                    
+                    <dt class="col-sm-3">Art</dt>
+                    <dd class="col-sm-9"><?= htmlspecialchars(($d['type']==='einzug'?'Einzugsprotokoll':($d['type']==='auszug'?'Auszugsprotokoll':'Zwischenabnahme'))) ?></dd>
+                    
+                    <dt class="col-sm-3">Mieter</dt>
+                    <dd class="col-sm-9"><?= htmlspecialchars((string)($d['tenant_name'] ?? '')) ?></dd>
+                    
+                    <dt class="col-sm-3">Zeitstempel</dt>
+                    <dd class="col-sm-9"><?= htmlspecialchars((string)($data['timestamp'] ?? '')) ?></dd>
+                    
+                    <?php if ($ownerInfo): ?>
+                    <dt class="col-sm-3">Eigentümer</dt>
+                    <dd class="col-sm-9"><?= htmlspecialchars($ownerInfo) ?></dd>
+                    <?php endif; ?>
+                    
+                    <?php if ($managerInfo): ?>
+                    <dt class="col-sm-3">Hausverwaltung</dt>
+                    <dd class="col-sm-9"><?= htmlspecialchars($managerInfo) ?></dd>
+                    <?php endif; ?>
+                </dl>
             </div>
-          </div>
-          <?php endif; ?>
-          <?php if (!empty($data['signatures']['witness'])): ?>
-          <div class="col-md-4">
-            <div class="card">
-              <div class="card-body text-center">
-                <h6 class="card-title">Dritte Person</h6>
-                <img src="<?= htmlspecialchars($data['signatures']['witness']) ?>" class="img-fluid" style="max-height: 60px;">
-                <p class="small text-muted mb-0"><?= htmlspecialchars($data['signatures']['witness_name'] ?? '') ?></p>
-              </div>
+        </div>
+        
+        <!-- Schritt 2: Räume -->
+        <?php if (!empty($data['rooms'])): ?>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="h6 mb-0"><i class="bi bi-2-circle me-2"></i>Räume (<?= count($data['rooms']) ?>)</h2>
             </div>
-          </div>
-          <?php endif; ?>
+            <div class="card-body">
+                <div class="row g-3">
+                    <?php foreach ($data['rooms'] as $i => $room): ?>
+                    <?php if (!empty($room['name'])): ?>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3">
+                            <h6 class="fw-bold mb-2"><?= htmlspecialchars($room['name']) ?></h6>
+                            
+                            <?php if (!empty($room['state'])): ?>
+                            <p class="small mb-2"><strong>Zustand:</strong> <?= htmlspecialchars($room['state']) ?></p>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($room['smell'])): ?>
+                            <p class="small mb-2"><strong>Geruch:</strong> <?= htmlspecialchars($room['smell']) ?></p>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($room['wmz_no']) || !empty($room['wmz_val'])): ?>
+                            <p class="small mb-2"><strong>WMZ:</strong> 
+                                <?= htmlspecialchars($room['wmz_no'] ?? 'Keine Nr.') ?> 
+                                (Stand: <?= htmlspecialchars($room['wmz_val'] ?? '—') ?>)
+                            </p>
+                            <?php endif; ?>
+                            
+                            <div class="d-flex align-items-center">
+                                <span class="badge <?= !empty($room['accepted']) ? 'bg-success' : 'bg-warning' ?>">
+                                    <?= !empty($room['accepted']) ? 'Abgenommen' : 'Nicht abgenommen' ?>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+            </div>
         </div>
         <?php endif; ?>
         
-        <form method="post" action="/protocols/wizard/finish?draft=<?= htmlspecialchars($draft) ?>" class="mt-3">
-          <button class="btn btn-success btn-lg">Abschließen & Speichern</button>
-          <a class="btn btn-ghost" href="/protocols/wizard?step=4&draft=<?= htmlspecialchars($draft) ?>">Zurück</a>
+        <!-- Schritt 3: Zählerstände -->
+        <?php 
+        $hasMeters = false;
+        if (!empty($data['meters'])) {
+            foreach ($data['meters'] as $meter) {
+                if (!empty($meter['no']) || !empty($meter['val'])) {
+                    $hasMeters = true;
+                    break;
+                }
+            }
+        }
+        ?>
+        <?php if ($hasMeters): ?>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="h6 mb-0"><i class="bi bi-3-circle me-2"></i>Zählerstände</h2>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <?php foreach ($data['meters'] as $key => $meter): ?>
+                    <?php if (!empty($meter['no']) || !empty($meter['val'])): ?>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded p-3">
+                            <h6 class="fw-bold mb-2"><?= htmlspecialchars($meterLabels[$key] ?? $key) ?></h6>
+                            <p class="small mb-1"><strong>Nummer:</strong> <?= htmlspecialchars($meter['no'] ?? '—') ?></p>
+                            <p class="small mb-0"><strong>Stand:</strong> <?= htmlspecialchars($meter['val'] ?? '—') ?></p>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Schritt 4: Schlüssel & weitere Angaben -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="h6 mb-0"><i class="bi bi-4-circle me-2"></i>Schlüssel & weitere Angaben</h2>
+            </div>
+            <div class="card-body">
+                
+                <!-- Schlüssel -->
+                <?php if (!empty($data['keys'])): ?>
+                <h6 class="mb-3">Schlüssel</h6>
+                <div class="row g-2 mb-4">
+                    <?php foreach ($data['keys'] as $key): ?>
+                    <?php if (!empty($key['label'])): ?>
+                    <div class="col-md-4">
+                        <div class="border rounded p-2">
+                            <div class="fw-bold"><?= htmlspecialchars($key['label']) ?></div>
+                            <div class="small text-muted">Anzahl: <?= (int)($key['qty'] ?? 1) ?></div>
+                            <?php if (!empty($key['no'])): ?>
+                            <div class="small text-muted">Nr.: <?= htmlspecialchars($key['no']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Bankdaten -->
+                <?php 
+                $bank = $data['meta']['bank'] ?? [];
+                if (!empty($bank['bank']) || !empty($bank['iban']) || !empty($bank['holder'])):
+                ?>
+                <h6 class="mb-3">Bankverbindung</h6>
+                <div class="row g-3 mb-4">
+                    <?php if (!empty($bank['bank'])): ?>
+                    <div class="col-md-4">
+                        <div class="small text-muted">Bank</div>
+                        <div><?= htmlspecialchars($bank['bank']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if (!empty($bank['iban'])): ?>
+                    <div class="col-md-4">
+                        <div class="small text-muted">IBAN</div>
+                        <div><?= htmlspecialchars($bank['iban']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if (!empty($bank['holder'])): ?>
+                    <div class="col-md-4">
+                        <div class="small text-muted">Kontoinhaber</div>
+                        <div><?= htmlspecialchars($bank['holder']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Kontaktdaten -->
+                <?php 
+                $contact = $data['meta']['tenant_contact'] ?? [];
+                if (!empty($contact['email']) || !empty($contact['phone'])):
+                ?>
+                <h6 class="mb-3">Kontaktdaten</h6>
+                <div class="row g-3 mb-4">
+                    <?php if (!empty($contact['email'])): ?>
+                    <div class="col-md-6">
+                        <div class="small text-muted">E-Mail</div>
+                        <div><?= htmlspecialchars($contact['email']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if (!empty($contact['phone'])): ?>
+                    <div class="col-md-6">
+                        <div class="small text-muted">Telefon</div>
+                        <div><?= htmlspecialchars($contact['phone']) ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Neue Meldeadresse -->
+                <?php 
+                $newAddr = $data['meta']['tenant_new_addr'] ?? [];
+                if (!empty($newAddr['street']) || !empty($newAddr['city'])):
+                ?>
+                <h6 class="mb-3">Neue Meldeadresse</h6>
+                <div class="mb-4">
+                    <?php
+                    $addrParts = [];
+                    if (!empty($newAddr['street'])) $addrParts[] = $newAddr['street'];
+                    if (!empty($newAddr['house_no'])) $addrParts[] = $newAddr['house_no'];
+                    $street = implode(' ', $addrParts);
+                    
+                    $cityParts = [];
+                    if (!empty($newAddr['postal_code'])) $cityParts[] = $newAddr['postal_code'];
+                    if (!empty($newAddr['city'])) $cityParts[] = $newAddr['city'];
+                    $city = implode(' ', $cityParts);
+                    
+                    if ($street) echo '<div>' . htmlspecialchars($street) . '</div>';
+                    if ($city) echo '<div>' . htmlspecialchars($city) . '</div>';
+                    ?>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Dritte Person -->
+                <?php if (!empty($data['meta']['third_attendee'])): ?>
+                <h6 class="mb-3">Anwesende dritte Person</h6>
+                <div class="mb-4">
+                    <div><?= htmlspecialchars($data['meta']['third_attendee']) ?></div>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Einwilligungen -->
+                <?php 
+                $consents = $data['meta']['consents'] ?? [];
+                if (!empty($consents)):
+                ?>
+                <h6 class="mb-3">Einwilligungen</h6>
+                <div class="mb-4">
+                    <div class="d-flex flex-wrap gap-2">
+                        <?php if (!empty($consents['privacy'])): ?>
+                        <span class="badge bg-success">Datenschutz akzeptiert</span>
+                        <?php endif; ?>
+                        <?php if (!empty($consents['disposal'])): ?>
+                        <span class="badge bg-success">Entsorgung akzeptiert</span>
+                        <?php endif; ?>
+                        <?php if (!empty($consents['marketing'])): ?>
+                        <span class="badge bg-success">Marketing akzeptiert</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+                
+            </div>
+        </div>
+        
+        <!-- Unterschriften -->
+        <?php if (!empty($data['signatures'])): ?>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2 class="h6 mb-0"><i class="bi bi-pen me-2"></i>Digitale Unterschriften</h2>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <?php if (!empty($data['signatures']['tenant'])): ?>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 text-center">
+                            <h6 class="mb-3">Mieter</h6>
+                            <img src="<?= htmlspecialchars($data['signatures']['tenant']) ?>" class="img-fluid mb-2" style="max-height: 60px; border: 1px solid #dee2e6;">
+                            <div class="small text-muted"><?= htmlspecialchars($data['signatures']['tenant_name'] ?? 'Mieter') ?></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if (!empty($data['signatures']['landlord'])): ?>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 text-center">
+                            <h6 class="mb-3">Eigentümer/Vermieter</h6>
+                            <img src="<?= htmlspecialchars($data['signatures']['landlord']) ?>" class="img-fluid mb-2" style="max-height: 60px; border: 1px solid #dee2e6;">
+                            <div class="small text-muted"><?= htmlspecialchars($data['signatures']['landlord_name'] ?? 'Vermieter') ?></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <?php if (!empty($data['signatures']['witness'])): ?>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 text-center">
+                            <h6 class="mb-3">Dritte Person</h6>
+                            <img src="<?= htmlspecialchars($data['signatures']['witness']) ?>" class="img-fluid mb-2" style="max-height: 60px; border: 1px solid #dee2e6;">
+                            <div class="small text-muted"><?= htmlspecialchars($data['signatures']['witness_name'] ?? 'Zeuge') ?></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Aktionen -->
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1">Protokoll abschließen</h6>
+                        <div class="small text-muted">Nach dem Abschluss wird das Protokoll gespeichert und kann bearbeitet werden.</div>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-success btn-lg me-2" 
+                                onclick="finishProtocol()">
+                            <i class="bi bi-check-lg me-1"></i>Abschließen & Speichern
+                        </button>
+                        
+                        <a class="btn btn-outline-secondary" href="/protocols/wizard?step=4&draft=<?= htmlspecialchars($draft) ?>">
+                            <i class="bi bi-arrow-left me-1"></i>Zurück
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Verstecktes POST-Formular für Abschluss -->
+        <form id="finishForm" method="post" action="/protocols/wizard/finish?draft=<?= htmlspecialchars($draft) ?>" style="display: none;">
+            <input type="hidden" name="draft_id" value="<?= htmlspecialchars($draft) ?>">
+            <input type="hidden" name="action" value="finish_protocol">
         </form>
+        
+        <script>
+        function finishProtocol() {
+            // Button deaktivieren um Doppel-Submissions zu verhindern
+            const button = event.target;
+            button.disabled = true;
+            button.innerHTML = '<i class="spinner-border spinner-border-sm me-1"></i>Speichere...';
+            
+            // Form abrufen und absenden
+            const form = document.getElementById('finishForm');
+            form.noValidate = true;
+            
+            // Kurzer Timeout für visuelles Feedback
+            setTimeout(() => {
+                form.submit();
+            }, 100);
+        }
+        </script>
+        
         <?php
-        View::render('Review', ob_get_clean());
+        View::render('Protokoll Review', ob_get_clean());
     }
 
+    /**
+     * Schließt den Wizard ab und speichert das finale Protokoll
+     * Erstellt ein neues Protokoll in der Datenbank mit allen Wizard-Daten
+     * Unterstützt sowohl GET- als auch POST-Requests für maximale Kompatibilität
+     */
     public function finish(): void
     {
         Auth::requireAuth();
         $pdo=Database::pdo();
         $draft=(string)($_GET['draft'] ?? '');
+        
+        // Fallback: draft_id aus POST falls GET leer ist
+        if (empty($draft) && !empty($_POST['draft_id'])) {
+            $draft = (string)$_POST['draft_id'];
+        }
+        
+        if (empty($draft)) {
+            Flash::add('error','Draft-ID fehlt.');
+            header('Location:/protocols');
+            return;
+        }
+        
         $st=$pdo->prepare("SELECT * FROM protocol_drafts WHERE id=? AND status='draft'");
         $st->execute([$draft]); $d=$st->fetch(PDO::FETCH_ASSOC);
-        if(!$d){ Flash::add('error','Entwurf nicht gefunden.'); header('Location:/protocols'); return; }
+        
+        if(!$d){ 
+            Flash::add('error','Entwurf nicht gefunden.'); 
+            header('Location:/protocols'); 
+            return; 
+        }
         $data=json_decode((string)($d['data']??'{}'), true) ?: [];
 
         if (empty($d['unit_id']) || empty($d['type'])) {
@@ -642,7 +1151,12 @@ final class ProtocolWizardController
             $this->saveSignaturesToDatabase($pdo, $pid, $data['signatures']);
         }
 
-        try { $pdo->prepare("UPDATE protocol_files SET protocol_id=?, draft_id=NULL WHERE draft_id=?")->execute([$pid,$draft]); } catch (\Throwable $e) {}
+        try { 
+            $pdo->prepare("UPDATE protocol_files SET protocol_id=?, draft_id=NULL WHERE draft_id=?")->execute([$pid,$draft]); 
+        } catch (\Throwable $e) {
+            // Log error if needed, but don't stop execution
+        }
+        
         $pdo->prepare("UPDATE protocol_drafts SET status='finished', updated_at=NOW() WHERE id=?")->execute([$draft]);
 
         Flash::add('success','Protokoll gespeichert (v1).');
