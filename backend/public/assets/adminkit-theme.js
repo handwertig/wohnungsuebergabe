@@ -123,6 +123,12 @@
             // Form validation styling
             const forms = document.querySelectorAll('form');
             forms.forEach(form => {
+                // Skip protocol edit form - it has its own handling
+                if (form.id === 'protocol-edit-form') {
+                    console.log('[AdminKit] Skipping validation for protocol-edit-form');
+                    return;
+                }
+                
                 form.addEventListener('submit', function(e) {
                     // Add was-validated class for Bootstrap validation styling
                     if (!this.checkValidity()) {

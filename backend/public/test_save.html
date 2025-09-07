@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Protocol Save Test</title>
+    <script>
+        function testSave() {
+            console.log('Testing protocol save...');
+            
+            // Create form
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/protocols/save';
+            
+            // Add test data
+            const fields = {
+                'id': '82cc7de7-7d1e-11f0-89a6-822b82242c5d',
+                'tenant_name': 'Test Mieter ' + new Date().getTime(),
+                'type': 'einzug',
+                '_no_csrf': '1'
+            };
+            
+            for (const [key, value] of Object.entries(fields)) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = value;
+                form.appendChild(input);
+            }
+            
+            // Append to body and submit
+            document.body.appendChild(form);
+            form.submit();
+        }
+    </script>
+</head>
+<body>
+    <h1>Protocol Save Test</h1>
+    <p>This will test the save functionality with a dummy update.</p>
+    <button onclick="testSave()">Test Save</button>
+    <hr>
+    <h2>Console Output</h2>
+    <p>Open browser console (F12) to see debug output</p>
+</body>
+</html>

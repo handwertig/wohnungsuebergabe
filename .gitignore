@@ -1,11 +1,97 @@
-vendor/
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE Files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Dependencies
+/backend/vendor/
+node_modules/
+
+# Environment
 .env
 .env.local
 .env.*.local
-db_data/
-node_modules/
-.idea/
-.DS_Store
 
-# Claude AI conversation history
-.claude/
+# Logs
+*.log
+error_log
+access_log
+/backend/logs/
+/logs/
+
+# Storage & Uploads
+/backend/storage/pdfs/*.pdf
+/backend/storage/uploads/
+/backend/storage/temp/
+/backend/storage/branding/*
+!/backend/storage/branding/.gitkeep
+
+# Cache
+/backend/cache/
+*.cache
+
+# Database
+*.sql
+*.sqlite
+*.db
+/backup/
+/backups/
+
+# Temporary Files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*~
+
+# Test & Debug Files
+/test/
+/tests/
+*.test.php
+*_test.php
+debug.php
+info.php
+phpinfo.php
+test.html
+
+# Fix Scripts (should not be in repo)
+fix_*.sh
+fix_*.php
+*_fix.sh
+*_fix.php
+COMPLETE_FIX.sh
+FINAL_FIX.sh
+quick.sh
+quick.php
+
+# Temporary Documentation
+LÖSUNG.md
+EVENTS_FIXED.md
+FEHLER_BEHOBEN.md
+FIX_ANLEITUNG.md
+Notes.md
+RELEASE_NOTES.md
+TODO.md
+TEMP_*.md
+
+# Build Files
+/build/
+/dist/
+*.zip
+*.tar.gz
+
+# Docker volumes (local development)
+/docker/volumes/
+
+# Keep these
+!.gitkeep
+!README.md
+!CHANGELOG.md
+!LICENSE

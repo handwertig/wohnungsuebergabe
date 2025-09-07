@@ -1,308 +1,188 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
+und dieses Projekt folgt [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.0.5] - 2025-09-07
+
+### 🔧 Behobene Fehler
+
+#### Kritische Fixes
+- **Type "Zwischenprotokoll":** Datenbank-Spalte von VARCHAR(10) auf VARCHAR(50) erweitert
+- **Event-Logging:** protocol_events Tabelle wird jetzt korrekt befüllt
+- **Docker-Befehle:** Container-Namen korrigiert (app statt web)
+- **UUID-Generator:** UuidHelper Klasse für sichere ID-Generierung implementiert
+
+### ✨ Neue Features
+- **EventLogger Klasse:** Zentrales Event-Logging System
+- **UuidHelper Klasse:** UUID v4 Generator nach RFC 4122
+- **Fix-Scripts:** Automatische Reparatur-Tools für alle Probleme
+- **Verbesserte Dokumentation:** Vollständige Docker-Befehlsreferenz
+
+### 📦 Neue Dateien
+- `/backend/src/UuidHelper.php`
+- `/backend/src/EventLogger.php`
+- `/backend/fix_events.php`
+- `/backend/add_test_events.php`
+- `/COMPLETE_FIX.sh`
+- `/fix_events_now.sh`
+- `/quick.sh`
+
+### 🛠 Technische Änderungen
+- Type-Spalte in protocols Tabelle erweitert
+- protocol_events Tabelle mit optimierten Indizes
+- Fallback-Mechanismen für UUID-Generierung
+- Robustere Fehlerbehandlung im ProtocolsController
 
 ## [2.0.4] - 2025-09-07
 
-### 🔧 Kritische Fehlerbehebung - Protokoll-Speicherung
-- **BEHOBEN:** Protokoll-Änderungen werden jetzt korrekt gespeichert
-- **BEHOBEN:** Routing-Fehler zu nicht-existierender working_save.php
-- **BEHOBEN:** System-Logging für Protokoll-Änderungen funktioniert
-- **BEHOBEN:** Event-Tracking für Protokolle aktiviert
+### 🔧 Behobene Fehler
+- Protokoll-Speicherung funktioniert wieder
+- Routing-Fehler zu working_save.php behoben
+- System-Logging für Protokoll-Änderungen aktiviert
 
-### 🛠️ Technische Verbesserungen
-- ProtocolsController::save() Methode vollständig implementiert
-- Transaktionale Sicherheit bei Protokoll-Updates
-- Umfassendes Error-Handling mit Rollback
-- Automatische Versionierung von Protokoll-Änderungen
+### ✨ Neue Features
+- Vollständige ProtocolsController::save() Implementation
+- Transaktionale Sicherheit bei Updates
+- Automatische Protokoll-Versionierung
+- Event-Tracking für alle Änderungen
 
-### 🗄️ Datenbank-Optimierungen
+### 📊 Datenbank
 - protocol_events Tabelle für Ereignis-Tracking
 - audit_log Tabelle für Änderungsverfolgung
-- email_log Tabelle für Versand-Protokolle
-- Optimierte Indizes für bessere Performance
-
-### 🔧 Neue Diagnose-Tools
-- debug_protocol_save.sh - Umfassende Protokoll-Diagnose
-- fix_protocol_save.sh - Automatische Reparatur
-- final_test_protocol.sh - Funktionstest
+- email_log Tabelle für Versand-Historie
+- Optimierte Indizes
 
 ## [2.0.3] - 2025-09-07
 
-### 🔧 Finale Lösung - Settings & Logging
-- **BEHOBEN:** Settings-Speicherung funktioniert jetzt zuverlässig
-- **BEHOBEN:** Alle Änderungen werden korrekt im System-Log protokolliert
-- **BEHOBEN:** Datenbank-Schema vollständig korrigiert
-- **GETESTET:** Umfassende Tests im Docker-Container durchgeführt
-- **VERIFIZIERT:** Web-Interface speichert alle Einstellungen korrekt
+### 🔧 Behobene Fehler
+- Settings-Speicherung repariert
+- System-Log funktioniert zuverlässig
+- Datenbank-Schema korrigiert
 
-### 🛠️ Technische Details
-- Settings-Tabelle mit DEFAULT CURRENT_TIMESTAMP für updated_at
-- System_log-Tabelle mit korrekten Spalten und Indizes
-- Konsistente UTF8MB4 Kollation überall
-- Robuste Fehlerbehandlung in allen Komponenten
+### ✨ Verbesserungen
+- Settings mit Transaktionssicherheit
+- Automatisches Logging aller Änderungen
+- UTF8MB4 Kollation vereinheitlicht
+- Robuste Fehlerbehandlung
 
 ## [2.0.2] - 2025-09-07
 
-### 🔧 Kritische Fehlerbehebung - Settings & Logging
-- **BEHOBEN:** Settings werden jetzt korrekt in der Datenbank gespeichert
-- **BEHOBEN:** System-Log schreibt wieder alle Änderungen mit
-- **BEHOBEN:** Mail-Einstellungen (SMTP) werden korrekt persistiert
-- **BEHOBEN:** DocuSign-Konfiguration wird richtig gespeichert
-- **BEHOBEN:** Textbausteine-Versionierung funktioniert wieder
+### 🔧 Behobene Fehler
+- Settings werden korrekt gespeichert
+- SMTP-Einstellungen persistieren
+- DocuSign-Konfiguration funktioniert
+- Textbausteine-Versionierung repariert
 
-### 🛠️ Verbesserte Settings-Klasse
-- **NEU:** Automatisches Logging aller Settings-Änderungen
-- **NEU:** Transaktionssicherheit bei setMany() Operationen
-- **NEU:** Debug-Methode für Settings-Diagnose
-- **VERBESSERT:** Fehlerbehandlung mit detaillierten Error-Logs
-- **VERBESSERT:** Cache-Management für bessere Performance
-
-### 📊 System-Logger Verbesserungen
-- **NEU:** Mehrere Fallback-Ebenen für robustes Logging
-- **NEU:** Automatische Tabellen-Erstellung wenn fehlend
-- **VERBESSERT:** Kompatibilität mit verschiedenen DB-Strukturen
-- **VERBESSERT:** Performance bei hohem Log-Aufkommen
-
-### 🗄️ Datenbank-Stabilität
-- **NEU:** Automatische Reparatur-Skripte für Settings/Logs
-- **NEU:** Migrations für fehlende Tabellen-Spalten
-- **VERBESSERT:** Konsistente UTF8MB4 Kollation
-- **VERBESSERT:** Indizes für bessere Query-Performance
+### ✨ Neue Features
+- Verbesserte Settings-Klasse
+- System-Logger mit Fallback-Ebenen
+- Automatische Tabellen-Erstellung
+- Debug-Methoden für Diagnose
 
 ## [2.0.1] - 2025-09-06
 
-### 🔧 Kritische Fehlerbehebung
-- **BEHOBEN:** Kollationsproblem in MariaDB (`utf8mb4_uca1400_ai_ci` vs `utf8mb4_unicode_ci`)
-- **BEHOBEN:** Schema-Inkonsistenz in `protocol_versions` Tabelle (`version_no` vs `version_number`)
-- **BEHOBEN:** PDF-Versionierung VIEW `protocol_versions_with_pdfs` funktioniert wieder
-- **BEHOBEN:** JOIN-Operationen mit expliziter Kollations-Behandlung
+### 🔧 Behobene Fehler
+- Kollationsproblem in MariaDB behoben
+- Schema-Inkonsistenz in protocol_versions
+- PDF-Versionierung VIEW repariert
+- JOIN-Operationen mit Kollations-Behandlung
 
-### 🛠️ Wartungstools
-- **NEU:** `ultimate_fix.sh` - Automatische Datenbank-Reparatur
-- **NEU:** `debug_collation.sh` - Kollations-Analyse-Tool
-- **NEU:** `fix_collation_problem.sh` - Spezifische Kollations-Reparatur
-- **NEU:** Migrationen 027-029 für Kollations- und Schema-Fixes
-
-### 📚 Dokumentation
-- **NEU:** `TROUBLESHOOTING_COLLATION.md` - Umfassende Fehlerbehebung
-- **ERWEITERT:** `Notes.md` mit detaillierter Problemanalyse
-- **VERBESSERT:** Schritt-für-Schritt Anleitungen für Datenbankprobleme
-
-### ⚡ Performance & Stabilität
-- **OPTIMIERT:** Alle Tabellen einheitlich auf `utf8mb4_unicode_ci`
-- **VERBESSERT:** Container-Management mit automatischen Neustarts
-- **STABILISIERT:** Error-Handling mit besseren Fallback-Mechanismen
+### 🛠 Wartungstools
+- ultimate_fix.sh für Datenbank-Reparatur
+- debug_collation.sh für Analyse
+- Migrationen 027-029 für Fixes
 
 ## [2.0.0] - 2025-01-20
 
-### 🎨 Major Design Overhaul
-- **BREAKING:** Completely redesigned UI with AdminKit theme
-- **NEW:** Ultra-minimal border-radius (4-8px) for modern look
-- **NEW:** Subtle shadow system with 60-90% reduced intensity
-- **NEW:** Responsive design optimized for mobile devices
-- **IMPROVED:** Consistent color scheme across all components
+### 🎨 Major Release - Komplettes Redesign
+- **BREAKING:** Neues UI mit AdminKit Theme
+- Minimale Border-Radius (4-8px)
+- Subtiles Schatten-System
+- Responsive Design
+- Konsistentes Farbschema
 
-### 🧭 Navigation & UX
-- **NEW:** Breadcrumb navigation for /objects, /owners, /managers
-- **NEW:** Professional terminal-style System-Log interface
-- **IMPROVED:** Compact table layouts with better information density
-- **IMPROVED:** Streamlined Settings pages without "bloated" icons
-- **FIXED:** Consistent button styling across all management pages
+### ✨ Neue Features
+- Breadcrumb-Navigation
+- System-Audit-Log
+- Erweiterte Benutzerverwaltung
+- Role-Based Access Control
+- Demo-Daten Generator
 
-### 🔧 System Administration
-- **NEW:** Comprehensive System Audit Log with real-time monitoring
-- **NEW:** Advanced filtering and search capabilities
-- **NEW:** Auto-generated demo data for immediate testing
-- **NEW:** Live monitoring indicators and status badges
-- **IMPROVED:** 50 entries per page for better performance
-
-### 👥 User Management
-- **NEW:** Enhanced user role management (Admin/Hausverwaltung/Eigentümer)
-- **NEW:** User assignment system for managers and owners
-- **NEW:** Role-based access control with granular permissions
-- **IMPROVED:** Streamlined user creation workflow
-
-### 🏗️ Technical Infrastructure
-- **NEW:** PSR-4 compliant autoloading
-- **NEW:** Improved MVC architecture with better separation
-- **NEW:** Enhanced error handling and logging
-- **NEW:** SQL query optimization with proper indexing
-- **IMPROVED:** Database schema with audit trail support
-
-### 🎯 Code Quality
-- **NEW:** Consistent `esc()` method across all controllers
-- **NEW:** Type hints and strict typing throughout
-- **IMPROVED:** Standardized HTML escaping and security
-- **FIXED:** Multiple syntax errors and code inconsistencies
+### 🛠 Technische Verbesserungen
+- PSR-4 Autoloading
+- MVC-Architektur
+- Type-Hints überall
+- Prepared Statements
+- XSS-Schutz
 
 ## [1.9.0] - 2025-01-15
 
-### 🔐 Security & Authentication
-- **NEW:** Enhanced session management
-- **NEW:** Improved CSRF protection
-- **IMPROVED:** Password hashing with bcrypt
-- **FIXED:** XSS vulnerabilities in form inputs
-
-### 📧 Email System
-- **NEW:** SMTP configuration interface
-- **NEW:** Email template system
-- **IMPROVED:** Error handling for failed email delivery
-- **FIXED:** Email encoding issues with German characters
+### 🔐 Sicherheit
+- Verbessertes Session-Management
+- CSRF-Protection
+- Bcrypt Password-Hashing
+- XSS-Vulnerabilities behoben
 
 ## [1.8.0] - 2025-01-10
 
-### 📋 Protocol Management
-- **NEW:** Digital handover protocol creation
-- **NEW:** PDF generation with TCPDF
-- **NEW:** Protocol templates and customization
-- **IMPROVED:** Form validation and error handling
-
-### 🏢 Data Management
-- **NEW:** Object management (properties/units)
-- **NEW:** Owner management with company support
-- **NEW:** Property manager administration
-- **IMPROVED:** Database relationships and constraints
+### 📋 Protokoll-Management
+- Digitale Übergabeprotokolle
+- PDF-Generierung mit TCPDF
+- Protokoll-Templates
+- Form-Validierung
 
 ## [1.7.0] - 2025-01-05
 
-### 🎨 Branding & Customization
-- **NEW:** Logo upload functionality
-- **NEW:** Custom CSS injection for theming
-- **NEW:** Configurable text blocks (legal texts)
-- **IMPROVED:** Brand consistency across generated documents
-
-### ⚙️ Settings Management
-- **NEW:** Centralized settings interface
-- **NEW:** DocuSign integration configuration
-- **NEW:** SMTP settings management
-- **IMPROVED:** Settings validation and error handling
+### 🎨 Branding
+- Logo-Upload
+- Custom CSS
+- Textbausteine konfigurierbar
+- Konsistentes Branding
 
 ## [1.6.0] - 2024-12-30
 
-### 🔧 System Configuration
-- **NEW:** Docker containerization
-- **NEW:** Environment-based configuration
-- **NEW:** Database migration system
-- **IMPROVED:** Deployment automation
-
-### 📊 Database & Performance
-- **NEW:** Optimized database schema
-- **NEW:** Query performance improvements
-- **NEW:** Connection pooling support
-- **IMPROVED:** Memory usage optimization
+### 🐳 Docker
+- Docker-Containerisierung
+- Environment-basierte Konfiguration
+- Datenbank-Migration System
+- Deployment-Automatisierung
 
 ## [1.5.0] - 2024-12-25
 
-### 🏗️ Core Architecture
-- **NEW:** MVC framework implementation
-- **NEW:** Router with clean URLs
-- **NEW:** Autoloader for PSR-4 compliance
-- **IMPROVED:** Code organization and structure
-
-### 🔍 Search & Filtering
-- **NEW:** Global search functionality
-- **NEW:** Advanced filtering options
-- **NEW:** Pagination system
-- **IMPROVED:** Query performance and indexing
-
-## [1.4.0] - 2024-12-20
-
-### 📱 Responsive Design
-- **NEW:** Mobile-optimized interface
-- **NEW:** Touch-friendly interactions
-- **NEW:** Responsive tables and forms
-- **IMPROVED:** Cross-browser compatibility
-
-### 🎯 User Experience
-- **NEW:** Improved form validation
-- **NEW:** Real-time feedback
-- **NEW:** Progress indicators
-- **IMPROVED:** Error messaging and help text
-
-## [1.3.0] - 2024-12-15
-
-### 📄 Document Generation
-- **NEW:** PDF template engine
-- **NEW:** Customizable document layouts
-- **NEW:** Digital signature preparation
-- **IMPROVED:** Document quality and formatting
-
-### 🔄 Workflow Management
-- **NEW:** Protocol status tracking
-- **NEW:** Approval workflows
-- **NEW:** Notification system
-- **IMPROVED:** Process automation
-
-## [1.2.0] - 2024-12-10
-
-### 🎨 UI/UX Improvements
-- **NEW:** Bootstrap 5 integration
-- **NEW:** Modern form components
-- **NEW:** Improved typography
-- **IMPROVED:** Visual hierarchy and spacing
-
-### 🔧 Backend Enhancements
-- **NEW:** Input sanitization
-- **NEW:** Prepared statements for security
-- **NEW:** Session timeout handling
-- **IMPROVED:** Error logging and debugging
-
-## [1.1.0] - 2024-12-05
-
-### 🏠 Property Management
-- **NEW:** Multi-property support
-- **NEW:** Property categorization
-- **NEW:** Location-based organization
-- **IMPROVED:** Data import/export functionality
-
-### 👤 Contact Management
-- **NEW:** Contact relationship mapping
-- **NEW:** Communication history
-- **NEW:** Contact preferences
-- **IMPROVED:** Search and filtering capabilities
+### 🏗 Architektur
+- MVC Framework
+- Router mit Clean URLs
+- PSR-4 Autoloader
+- Code-Organisation
 
 ## [1.0.0] - 2024-12-01
 
 ### 🚀 Initial Release
-- **NEW:** Basic protocol creation system
-- **NEW:** User authentication and authorization
-- **NEW:** Database schema and core models
-- **NEW:** Basic CRUD operations for all entities
-- **NEW:** Initial web interface with Bootstrap
-- **NEW:** Email notification system
-- **NEW:** PDF export functionality
+- Basis-System für Wohnungsübergaben
+- Benutzer-Authentifizierung
+- CRUD-Operationen
+- E-Mail-System
+- PDF-Export
 
 ---
 
-## Development Notes
+## Legende
 
-### Version Numbering
-- **MAJOR:** Breaking changes or significant feature additions
-- **MINOR:** New features, backwards compatible
-- **PATCH:** Bug fixes and small improvements
+- 🔧 **Behobene Fehler** - Bugfixes und Korrekturen
+- ✨ **Neue Features** - Neue Funktionalitäten
+- 🛠 **Technische Änderungen** - Interne Verbesserungen
+- 📊 **Datenbank** - Schema-Änderungen
+- 🎨 **Design** - UI/UX Updates
+- 🔐 **Sicherheit** - Security Updates
+- 📦 **Dependencies** - Paket-Updates
+- 🚀 **Release** - Major Releases
+- 💥 **Breaking Changes** - Inkompatible Änderungen
 
-### Release Schedule
-- **Major releases:** Quarterly
-- **Minor releases:** Monthly
-- **Patch releases:** As needed for critical fixes
+---
 
-### Upgrade Path
-- Always backup database before upgrading
-- Run migration scripts for schema changes
-- Clear cache after updates
-- Test all critical functions after deployment
-
-### Deprecated Features
-- **v1.x legacy forms:** Will be removed in v3.0.0
-- **Old email templates:** Replaced with new system in v2.0.0
-- **Basic authentication:** Enhanced security in v2.0.0
-
-### Breaking Changes in v2.0.0
-- **Database schema:** New audit_log tables required
-- **CSS classes:** AdminKit theme requires new class names
-- **Config format:** Environment variables now required
-- **PHP version:** Minimum PHP 8.1 required
+**Aktuelle Version:** 2.0.5  
+**Status:** Production Ready  
+**Datum:** 07.09.2025

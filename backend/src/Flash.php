@@ -21,4 +21,21 @@ final class Flash
         unset($_SESSION[self::KEY]);
         return $msgs;
     }
+
+    public static function display(): void
+    {
+        $messages = self::pull();
+        foreach ($messages as $msg) {
+            $type = match($msg['type']) {
+                'error' => 'danger',
+                'success' => 'success',
+                'warning' => 'warning',
+                default => 'info'
+            };
+            echo '<div class="alert alert-' . $type . ' alert-dismissible fade show" role="alert">'
+                . htmlspecialchars($msg['message'])
+                . '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>'
+                . '</div>';
+        }
+    }
 }

@@ -2,297 +2,212 @@
 
 Ein modernes, benutzerfreundliches System zur Verwaltung von Wohnungsübergaben mit PDF-Generierung, E-Mail-Integration und umfassendem Audit-System.
 
-## Features
+## 🚀 Version 2.0.5 - Production Ready
 
-### Kernfunktionalitäten
-- **Digitale Übergabeprotokolle** - Strukturierte Erfassung aller Übergabedaten
-- **E-Mail-Integration** - Automatischer Versand von Protokollen und Dokumenten
-- **PDF-Generierung** - Professionelle PDF-Dokumente mit Branding
-- **Responsive Design** - Optimiert für Desktop, Tablet und Mobile
-- **Benutzer- & Rechteverwaltung** - Granulare Zugriffskontrollen
+### ✨ Highlights dieser Version
+- Vollständige Unterstützung für "Zwischenprotokoll"
+- Event-Logging System funktioniert zuverlässig
+- Docker-Befehle korrigiert und dokumentiert
+- UUID v4 Generator für sichere IDs
+- Robuste Fehlerbehandlung implementiert
+
+## 📋 Features
+
+### Kernfunktionen
+- **Digitale Übergabeprotokolle**
+  - Einzugsprotokoll
+  - Auszugsprotokoll
+  - Zwischenprotokoll
+- **PDF-Generierung** mit Versionierung
+- **E-Mail-Integration** mit SMTP-Support
+- **Event-Tracking** für vollständige Historie
+- **Responsive Design** für alle Geräte
+- **Benutzer- und Rechteverwaltung**
 
 ### Administration
-- **Multi-Tenant-Architektur** - Trennung von Eigentümern und Hausverwaltungen
-- **System-Audit-Log** - Vollständige Nachverfolgung aller Aktivitäten
-- **Konfigurierbare Einstellungen** - SMTP, DocuSign, Textbausteine
-- **Anpassbares Branding** - Logo-Upload und Custom CSS
+- Multi-Tenant-Architektur
+- System-Audit-Log
+- Protocol-Events Tracking
+- Konfigurierbare Einstellungen
+- Anpassbares Branding
 
 ### Datenmanagement
-- **Objektverwaltung** - Immobilien und Wohneinheiten organisieren
-- **Kontaktverwaltung** - Eigentümer und Hausverwaltungen verwalten
-- **Protokoll-Templates** - Vordefinierte Checklisten und Formulare
-- **Erweiterte Suche** - Volltextsuche über alle Datensätze
+- Objektverwaltung (Immobilien/Wohneinheiten)
+- Kontaktverwaltung (Eigentümer/Hausverwaltungen)
+- Protokoll-Templates
+- Erweiterte Suchfunktionen
 
-## Technische Details
+## 🛠 Technische Details
 
 ### Tech-Stack
-- **Backend:** PHP 8.1+ mit OOP-Architektur
+- **Backend:** PHP 8.1+ (OOP)
 - **Frontend:** Bootstrap 5.3 + AdminKit Theme
-- **Datenbank:** MySQL/MariaDB
-- **PDF-Engine:** TCPDF für Dokumentgenerierung
-- **E-Mail:** PHPMailer mit SMTP-Support
+- **Datenbank:** MariaDB 11.4
+- **Container:** Docker & Docker Compose
+- **PDF:** TCPDF/Dompdf
+- **E-Mail:** PHPMailer
 
 ### Architektur
-- **MVC-Pattern** mit sauberer Controller-Struktur
-- **Repository-Pattern** für Datenzugriff
-- **Service-Layer** für Geschäftslogik
-- **PSR-4 Autoloading** für moderne PHP-Standards
+- MVC-Pattern
+- Repository-Pattern
+- Service-Layer
+- PSR-4 Autoloading
+- UUID v4 für IDs
 
-### Sicherheit
-- **Session-Management** mit sichere Cookie-Handling
-- **SQL-Injection-Schutz** durch Prepared Statements
-- **XSS-Protection** mit htmlspecialchars-Escaping
-- **Input-Validation** auf Server- und Client-Seite
-
-## Installation
+## 📦 Installation
 
 ### Voraussetzungen
-- Docker & Docker Compose
-- PHP 8.1+ (für lokale Entwicklung)
-- MySQL/MariaDB 8.0+
+- Docker & Docker Compose (v2.x)
+- Git
+- 4GB RAM
+- 10GB Speicherplatz
 
 ### Quick Start
+
 ```bash
-# Repository klonen
+# 1. Repository klonen
 git clone <repository-url>
 cd wohnungsuebergabe
 
-# Docker-Umgebung starten
-docker-compose up -d
+# 2. Setup ausführen (startet Docker und konfiguriert alles)
+chmod +x setup.sh
+./setup.sh
 
-# Initial-Setup ausführen
-docker-compose exec app php bin/setup.php
-
-# Anwendung ist verfügbar unter: http://localhost:8080
+# Alternative: Manueller Start
+docker compose up -d
 ```
 
-### Manuelle Installation
+### Zugriff
+- **Frontend:** http://localhost:8080
+- **phpMyAdmin:** http://localhost:8081 (root/root)
+- **MailPit:** http://localhost:8025
+
+## 🐳 Docker-Befehle
+
+### Wichtig: Neue Syntax ab v2.0.5
+
 ```bash
-# Abhängigkeiten installieren
-composer install
+# RICHTIG (neu):
+docker compose exec app php ...      # PHP-Container
+docker compose exec db mariadb ...   # Datenbank
+docker compose up -d                 # Starten
+docker compose down                  # Stoppen
 
-# Datenbank konfigurieren
-cp backend/config/database.example.php backend/config/database.php
-# Datenbank-Credentials eintragen
-
-# Migrations ausführen
-php bin/migrate.php
-
-# Webserver konfigurieren (Apache/Nginx)
-# Document Root: backend/public/
+# FALSCH (alt):
+docker-compose exec web php ...      # Funktioniert nicht!
 ```
 
-## Konfiguration
+### Container-Übersicht
+| Container | Service | Port | Beschreibung |
+|-----------|---------|------|--------------|
+| app | PHP-FPM | 9000 | PHP Application Server |
+| web | Nginx | 8080 | Webserver |
+| db | MariaDB | 3307 | Datenbank |
+| phpmyadmin | phpMyAdmin | 8081 | Datenbank-GUI |
+| mailpit | MailPit | 8025/1025 | E-Mail Testing |
 
-### Umgebungsvariablen
-```env
+## 🔧 Konfiguration
+
+### Datenbank
+- **Host:** db (intern) / localhost:3307 (extern)
+- **Datenbank:** app
+- **Benutzer:** root
+- **Passwort:** root
+
+### E-Mail Testing
+- **SMTP-Host:** mailpit
+- **SMTP-Port:** 1025
+- **Web-Interface:** http://localhost:8025
+
+## 📖 Verwendung
+
+### Neues Protokoll erstellen
+1. Login unter http://localhost:8080/login
+2. Menü → Protokolle
+3. "Neues Protokoll" klicken
+4. Typ wählen (Einzug/Auszug/Zwischenprotokoll)
+5. Daten erfassen und speichern
+6. PDF generieren (Tab "PDF-Versionen")
+7. Events prüfen (Tab "Protokoll")
+
+### Event-Tracking
+Alle Aktionen werden automatisch protokolliert:
+- Protokoll erstellt/bearbeitet
+- Type geändert
+- PDF generiert
+- E-Mail versendet
+
+## 🚨 Fehlerbehebung
+
+### Problem: "Data truncated for column 'type'"
+```bash
+docker compose exec app php quick_fix.php
+```
+
+### Problem: Keine Events werden angezeigt
+```bash
+docker compose exec app php /var/www/html/fix_events.php
+```
+
+### Problem: Docker-Befehle funktionieren nicht
+Verwenden Sie die neue Syntax mit Leerzeichen:
+```bash
+docker compose ...   # Richtig
+docker-compose ...   # Falsch
+```
+
+### Problem: Container starten nicht
+```bash
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+```
+
+## 🧪 Testing
+
+### Funktionstest
+```bash
+./final_test_v2.0.5.sh
+```
+
+### Manuelle Tests
+1. Login testen
+2. Protokoll erstellen
+3. Type "Zwischenprotokoll" setzen
+4. Events prüfen
+5. PDF generieren
+
+## 💾 Wartung
+
+### Backup
+```bash
 # Datenbank
-DB_HOST=localhost
-DB_NAME=wohnungsuebergabe
-DB_USER=admin
-DB_PASS=password
+docker compose exec db mariadb-dump -uroot -proot app > backup_$(date +%Y%m%d).sql
 
-# E-Mail (SMTP)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your-email@gmail.com
-SMTP_PASS=your-app-password
-
-# DocuSign (optional)
-DOCUSIGN_CLIENT_ID=your-client-id
-DOCUSIGN_CLIENT_SECRET=your-client-secret
-DOCUSIGN_BASE_URI=https://demo.docusign.net
+# Dateien
+tar -czf backup_files_$(date +%Y%m%d).tar.gz backend/storage/
 ```
 
-### Web-Interface Konfiguration
-1. **Admin-Account erstellen:** `/setup` besuchen
-2. **SMTP konfigurieren:** Einstellungen → E-Mail
-3. **Branding anpassen:** Einstellungen → Design
-4. **Textbausteine definieren:** Einstellungen → Textbausteine
-
-## Benutzerrollen
-
-### Administrator
-- Vollzugriff auf alle Funktionen
-- Benutzerverwaltung und Systemkonfiguration
-- Alle Objekte, Eigentümer und Hausverwaltungen
-
-### Hausverwaltung
-- Zugriff nur auf zugewiesene Verwaltungen
-- Kann Protokolle für verwaltete Objekte erstellen
-- Kontakt zu zugeordneten Eigentümern
-
-### Eigentümer
-- Nur Lesezugriff auf eigene Objekte
-- Kann Protokolle einsehen und herunterladen
-- Erhält automatische E-Mail-Benachrichtigungen
-
-## Verwendung
-
-### Neues Übergabeprotokoll erstellen
-1. **Objekt auswählen:** aus der Objektliste
-2. **Protokolltyp wählen:** Einzug/Auszug/Besichtigung
-3. **Daten erfassen:** strukturiert über Web-Interface
-4. **PDF generieren:** automatische Erstellung
-5. **E-Mail versenden:** an alle Beteiligten
-
-### Verwaltungsaufgaben
-- **Stammdaten pflegen:** Objekte, Eigentümer, Hausverwaltungen
-- **Benutzer verwalten:** Rechte zuweisen, Passwörter zurücksetzen
-- **System überwachen:** Audit-Log und Aktivitäten einsehen
-
-## Design-System
-
-### AdminKit Theme
-- **Ultra-minimale border-radius** (4-8px)
-- **Subtile Schatten** für moderne Ästhetik
-- **Responsive Grid** für alle Bildschirmgrößen
-- **Accessibility-optimiert** mit ARIA-Labels
-
-### Farbschema
-- **Primary:** #3b82f6 (Blue 500)
-- **Success:** #10b981 (Emerald 500)
-- **Warning:** #f59e0b (Amber 500)
-- **Danger:** #ef4444 (Red 500)
-
-## API-Dokumentation
-
-### REST-Endpoints
-```http
-GET    /api/protocols          # Alle Protokolle abrufen
-POST   /api/protocols          # Neues Protokoll erstellen
-GET    /api/protocols/{id}     # Protokoll-Details
-PUT    /api/protocols/{id}     # Protokoll bearbeiten
-DELETE /api/protocols/{id}     # Protokoll löschen
-
-GET    /api/objects            # Objekte verwalten
-GET    /api/owners             # Eigentümer verwalten
-GET    /api/managers           # Hausverwaltungen verwalten
-```
-
-### Authentifizierung
-```http
-POST /api/auth/login
-{
-  "email": "user@example.com",
-  "password": "secure-password"
-}
-
-# Response
-{
-  "token": "jwt-token",
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "role": "admin"
-  }
-}
-```
-
-## Troubleshooting
-
-### Häufige Probleme
-
-**PDF-Generierung schlägt fehl:**
+### Updates
 ```bash
-# Berechtigungen prüfen
-chmod 755 backend/storage/pdfs/
-chown www-data:www-data backend/storage/
-
-# TCPDF-Logs prüfen
-tail -f backend/logs/pdf.log
+git pull origin main
+docker compose exec app composer update
+docker compose restart
 ```
 
-**E-Mail-Versand funktioniert nicht:**
-```bash
-# SMTP-Verbindung testen
-php bin/test-smtp.php
+## 📝 Lizenz
 
-# Mail-Queue prüfen
-php bin/mail-queue.php --status
-```
+MIT License - siehe LICENSE Datei
 
-**System-Log wird nicht befüllt:**
-```bash
-# SystemLogger initialisieren
-php bin/init-system-log.php
+## 🤝 Support
 
-# Log-Berechtigungen prüfen
-chmod 644 backend/logs/system.log
-```
-
-### Performance-Optimierung
-```bash
-# OPcache aktivieren (php.ini)
-opcache.enable=1
-opcache.memory_consumption=128
-opcache.max_accelerated_files=4000
-
-# MySQL-Optimierung
-innodb_buffer_pool_size=1G
-query_cache_size=64M
-```
-
-## Contributing
-
-### Development Setup
-```bash
-# Development-Container starten
-docker-compose -f docker-compose.dev.yml up -d
-
-# Code-Quality-Tools
-composer run-script phpstan    # Static Analysis
-composer run-script phpcs     # Code Standards
-composer run-script phpunit   # Unit Tests
-```
-
-### Code-Guidelines
-- **PSR-12** Code-Style befolgen
-- **Type-Hints** für alle Parameter verwenden
-- **DocBlocks** für alle public Methods
-- **Unit-Tests** für neue Features schreiben
-
-## Lizenz
-
-Dieses Projekt steht unter der MIT-Lizenz. Siehe `LICENSE` für Details.
-
-## Support
-
-- **Documentation:** `/docs` Verzeichnis
-- **Issues:** GitHub Issues verwenden
+- **Dokumentation:** `/docs` Verzeichnis
 - **E-Mail:** kontakt@handwertig.com
+- **phpMyAdmin:** http://localhost:8081
 
 ---
 
-## PDF-Versionierung
-
-Die Software unterstützt jetzt vollständige PDF-Versionierung für Wohnungsübergabeprotokolle:
-
-### Features
-- **Automatische Versionierung**: Bei jeder Änderung wird eine neue Version erstellt
-- **PDF-Generierung**: Für jede Version kann ein versioniertes PDF generiert werden
-- **Direktlinks**: PDFs sind unter `http://localhost:8080/protocols/edit?id={ID}` verfügbar
-- **Archivierung**: Alle Versionen bleiben dauerhaft verfügbar
-
-### Verwendung
-1. Öffnen Sie ein Protokoll im Editor (`/protocols/edit?id={ID}`)
-2. Im Tab "PDF-Versionen" sehen Sie alle verfügbaren Versionen
-3. Klicken Sie auf "PDF generieren" für eine spezifische Version
-4. Der PDF-Link wird automatisch erstellt und ist dauerhaft verfügbar
-
-### API-Endpunkte
-- `GET /protocols/pdf?id={ID}&version={VERSION}` - PDF für spezifische Version
-- `POST /protocols/create-version` - Neue Version erstellen
-- `GET /protocols/versions?id={ID}` - Versionsliste als JSON
-- `POST /protocols/generate-all-pdfs` - Alle PDFs generieren
-
-### Dateisystem
-- PDFs werden in `backend/storage/pdfs/` gespeichert
-- Dateiformat: `protokoll_{ID}_v{VERSION}.pdf`
-- Automatische Bereinigung älterer PDFs möglich
-
----
-
-**Version:** 2.1.0 (PDF-Versionierung)  
-**Last Updated:** September 2025  
+**Version:** 2.0.5  
+**Status:** Production Ready  
+**Datum:** 07.09.2025  
 **Maintainer:** Handwertig DevOps

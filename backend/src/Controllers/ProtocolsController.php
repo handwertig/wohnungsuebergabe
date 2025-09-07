@@ -302,7 +302,7 @@ final class ProtocolsController
         $html .= '</nav>';
         $html .= '</div>';
         
-        $html .= '<form method="post" action="/protocols/save" id="protocol-edit-form">';
+        $html .= '<form method="post" action="/protocols/save" id="protocol-edit-form" novalidate>';
         // CSRF KOMPLETT ENTFERNT - WORKING SAVE SYSTEM
         $html .= '<input type="hidden" name="id" value="' . self::h($id) . '">';
         $html .= '<input type="hidden" name="_no_csrf" value="1">';
@@ -642,13 +642,14 @@ final class ProtocolsController
         
         $html .= '</div>'; // tab-content
         
-        // Submit-Buttons
+        // Submit-Buttons - INNERHALB des Forms!
         $html .= '<div class="mt-4 d-flex justify-content-between">';
         $html .= '<a class="btn btn-outline-secondary" href="/protocols">';
         $html .= '<i class="bi bi-arrow-left me-2"></i>Zurück zur Übersicht';
         $html .= '</a>';
         $html .= '<div class="btn-group">';
-        $html .= '<button type="submit" class="btn btn-primary">';
+        // Explizit type="submit" und keine btn-submit Klasse (die vom AdminKit abgefangen wird)
+        $html .= '<button type="submit" class="btn btn-primary" id="save-protocol-btn">';
         $html .= '<i class="bi bi-floppy me-2"></i>Speichern';
         $html .= '</button>';
         $html .= '<a class="btn btn-outline-secondary" href="/protocols/pdf?protocol_id=' . $id . '" target="_blank">';
@@ -659,32 +660,50 @@ final class ProtocolsController
         
         $html .= '</form>';
         
-        // JavaScript für Debug und Submit-Überwachung
+        // JavaScript für Form-Submit - KOMPLETT NEU
         $html .= '<script>
         document.addEventListener("DOMContentLoaded", function() {
             const form = document.getElementById("protocol-edit-form");
-            if (form) {
-                form.addEventListener("submit", function(e) {
-                    console.log("Form wird gesendet...");
-                    console.log("Action:", form.action);
-                    console.log("Method:", form.method);
-                    
-                    // FormData sammeln für Debug
-                    const formData = new FormData(form);
-                    const data = {};
-                    for (let [key, value] of formData.entries()) {
-                        data[key] = value;
-                    }
-                    console.log("Form Data:", data);
-                    
-                    // Success-Meldung für User
-                    const submitBtn = form.querySelector("button[type=submit]");
-                    if (submitBtn) {
-                        submitBtn.disabled = true;
-                        submitBtn.innerHTML = "<i class=\"bi bi-hourglass-split\"></i> Speichert...";
-                    }
-                });
+            const submitBtn = document.getElementById("save-protocol-btn");
+            
+            if (!form) {
+                console.error("[ProtocolSave] Form nicht gefunden!");
+                return;
             }
+            
+            if (!submitBtn) {
+                console.error("[ProtocolSave] Submit Button nicht gefunden!");
+                return;
+            }
+            
+            console.log("[ProtocolSave] Form und Button gefunden");
+            
+            // WICHTIG: Entferne ALLE Event-Listener vom Button die möglicherweise von anderen Scripts hinzugefügt wurden
+            const newSubmitBtn = submitBtn.cloneNode(true);
+            submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
+            
+            // Neuer, sauberer Click-Handler
+            newSubmitBtn.addEventListener("click", function(e) {
+                console.log("[ProtocolSave] Button geklickt - Form wird gesendet");
+                
+                // Visual feedback
+                this.disabled = true;
+                this.innerHTML = "<i class=\"bi bi-hourglass-split\"></i> Speichert...";
+                
+                // Form absenden
+                form.submit();
+            });
+            
+            // Alternative: Enter-Taste im Formular
+            form.addEventListener("keypress", function(e) {
+                if (e.key === "Enter" && e.target.type !== "textarea") {
+                    e.preventDefault();
+                    console.log("[ProtocolSave] Enter gedrückt - Form wird gesendet");
+                    newSubmitBtn.click();
+                }
+            });
+            
+            console.log("[ProtocolSave] Event-Handler installiert");
         });
         </script>';
         
@@ -893,22 +912,94 @@ final class ProtocolsController
         $html .= '</div>';
         $html .= '<div class="card-body">';
         
-        // Lade Ereignisse aus protocol_events
+        // Debug: Prüfe ob Tabelle existiert
+        $tableExists = false;
         try {
-            $evStmt = $pdo->prepare("
-                SELECT type, message, created_at, created_by 
-                FROM protocol_events 
-                WHERE protocol_id = ? 
-                ORDER BY created_at DESC 
-                LIMIT 20
-            ");
-            $evStmt->execute([$protocolId]);
-            $events = $evStmt->fetchAll(PDO::FETCH_ASSOC);
+            $pdo->query("SELECT 1 FROM protocol_events LIMIT 1");
+            $tableExists = true;
         } catch (\PDOException $e) {
+            $html .= '<div class="alert alert-warning">';
+            $html .= '<i class="bi bi-exclamation-triangle"></i> ';
+            $html .= 'Die Ereignis-Tabelle existiert noch nicht. ';
+            $html .= 'Bitte führen Sie <code>./fix_protocol_events.sh</code> aus.';
+            $html .= '</div>';
+        }
+        
+        if ($tableExists) {
+            // Lade Ereignisse aus protocol_events
+            try {
+                $evStmt = $pdo->prepare("
+                    SELECT type, message, created_at, created_by 
+                    FROM protocol_events 
+                    WHERE protocol_id = ? 
+                    ORDER BY created_at DESC 
+                    LIMIT 20
+                ");
+                $evStmt->execute([$protocolId]);
+                $events = $evStmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                // Debug output
+                if (empty($events)) {
+                    $html .= '<div class="text-muted mb-2">Keine Ereignisse gefunden für Protocol ID: ' . self::h($protocolId) . '</div>';
+                    
+                    // Prüfe ob überhaupt Einträge existieren
+                    $countStmt = $pdo->query("SELECT COUNT(*) FROM protocol_events");
+                    $totalCount = $countStmt->fetchColumn();
+                    $html .= '<small class="text-muted">Gesamt-Einträge in Tabelle: ' . $totalCount . '</small><br>';
+                    
+                    // Zeige die letzten Einträge unabhängig von der protocol_id
+                    if ($totalCount > 0) {
+                        $html .= '<small class="text-muted">Letzte Einträge (alle Protokolle):</small>';
+                        $lastStmt = $pdo->query("SELECT protocol_id, type, message, created_at FROM protocol_events ORDER BY created_at DESC LIMIT 3");
+                        foreach ($lastStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                            $html .= '<div class="small text-muted">- [' . substr($row['protocol_id'], 0, 8) . '...] ' . $row['type'] . ': ' . $row['message'] . '</div>';
+                        }
+                    }
+                }
+            } catch (\PDOException $e) {
+                $events = [];
+                $html .= '<div class="alert alert-danger">Fehler beim Laden der Ereignisse: ' . self::h($e->getMessage()) . '</div>';
+            }
+            
+            // Ereignisse anzeigen
+            if (!empty($events)) {
+                $html .= '<div class="timeline">';
+                
+                foreach ($events as $event) {
+                    $type = self::h($event['type']);
+                    $message = !empty($event['message']) ? self::h($event['message']) : '';
+                    $date = date('d.m.Y H:i', strtotime($event['created_at']));
+                    $user = !empty($event['created_by']) ? self::h($event['created_by']) : 'System';
+                    
+                    $badgeClass = match($type) {
+                        'created' => 'bg-success',
+                        'updated' => 'bg-primary', 
+                        'sent_owner', 'sent_manager', 'sent_tenant' => 'bg-info',
+                        'signed' => 'bg-warning',
+                        'system_check' => 'bg-secondary',
+                        default => 'bg-secondary'
+                    };
+                    
+                    $html .= '<div class="timeline-item mb-3">';
+                    $html .= '<div class="d-flex align-items-start">';
+                    $html .= '<span class="badge ' . $badgeClass . ' me-3 mt-1">' . $type . '</span>';
+                    $html .= '<div class="flex-grow-1">';
+                    $html .= '<div class="fw-medium">' . $message . '</div>';
+                    $html .= '<small class="text-muted">' . $date . ' von ' . $user . '</small>';
+                    $html .= '</div>';
+                    $html .= '</div>';
+                    $html .= '</div>';
+                }
+                
+                $html .= '</div>'; // timeline
+            }
+        } else {
+            // Tabelle existiert nicht
             $events = [];
         }
         
         // Lade Audit-Log falls verfügbar
+        $auditLogs = []; // Initialisierung hier!
         try {
             $auditStmt = $pdo->prepare("
                 SELECT action, changes, created_at, user_id
@@ -920,36 +1011,13 @@ final class ProtocolsController
             $auditStmt->execute([$protocolId]);
             $auditLogs = $auditStmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
-            $auditLogs = [];
+            // Bereits initialisiert
         }
         
-        if (!empty($events) || !empty($auditLogs)) {
-            $html .= '<div class="timeline">';
-            
-            // Ereignisse anzeigen
-            foreach ($events as $event) {
-                $type = self::h($event['type']);
-                $message = !empty($event['message']) ? ': ' . self::h($event['message']) : '';
-                $date = date('d.m.Y H:i', strtotime($event['created_at']));
-                $user = !empty($event['created_by']) ? self::h($event['created_by']) : 'System';
-                
-                $badgeClass = match($type) {
-                    'created' => 'bg-success',
-                    'updated' => 'bg-primary', 
-                    'sent_owner', 'sent_manager', 'sent_tenant' => 'bg-info',
-                    'signed' => 'bg-warning',
-                    default => 'bg-secondary'
-                };
-                
-                $html .= '<div class="timeline-item mb-3">';
-                $html .= '<div class="d-flex align-items-start">';
-                $html .= '<span class="badge ' . $badgeClass . ' me-3 mt-1">' . $type . '</span>';
-                $html .= '<div class="flex-grow-1">';
-                $html .= '<div class="fw-medium">' . $type . $message . '</div>';
-                $html .= '<small class="text-muted">' . $date . ' von ' . $user . '</small>';
-                $html .= '</div>';
-                $html .= '</div>';
-                $html .= '</div>';
+        // Zeige Audit-Logs falls vorhanden
+        if (!empty($auditLogs)) {
+            if (empty($events)) {
+                $html .= '<div class="timeline">';
             }
             
             // Audit-Logs anzeigen
@@ -975,9 +1043,17 @@ final class ProtocolsController
                 $html .= '</div>';
             }
             
-            $html .= '</div>'; // timeline
-        } else {
+            if (empty($events)) {
+                $html .= '</div>'; // timeline
+            }
+        }
+        
+        // Falls gar keine Einträge
+        if (empty($events) && empty($auditLogs)) {
             $html .= '<div class="text-muted">Noch keine Ereignisse protokolliert.</div>';
+            $html .= '<div class="mt-2">';
+            $html .= '<small class="text-muted">Tipp: Ändern Sie etwas am Protokoll und speichern Sie es, um Ereignisse zu sehen.</small>';
+            $html .= '</div>';
         }
         
         $html .= '</div>';
@@ -1138,24 +1214,22 @@ final class ProtocolsController
     
     public function save(): void 
     { 
-        // Neue, funktionierende Save-Implementierung
+        // Debug-Logging aktivieren
+        error_log('[ProtocolSave] START - Method called');
+        error_log('[ProtocolSave] Request Method: ' . ($_SERVER['REQUEST_METHOD'] ?? 'unknown'));
+        error_log('[ProtocolSave] POST Data: ' . print_r($_POST, true));
         
-        // Session starten für Auth und Flash (nur wenn noch nicht aktiv)
-        if (session_status() !== PHP_SESSION_ACTIVE && !headers_sent()) {
-            session_start();
-        }
+        // Auth prüfen (wird schon in index.php gemacht, aber sicherheitshalber)
+        Auth::requireAuth();
         
-        // Einfache Auth-Prüfung
-        if (!isset($_SESSION['user'])) {
-            Flash::add('error', 'Nicht angemeldet.');
-            header('Location: /login');
-            exit;
-        }
+        error_log('[ProtocolSave] Auth check passed');
         
         $pdo = Database::pdo();
         $protocolId = (string)($_POST['id'] ?? '');
+        error_log('[ProtocolSave] Protocol ID: ' . $protocolId);
         
         if (empty($protocolId)) {
+            error_log('[ProtocolSave] ERROR - Protocol ID missing');
             Flash::add('error', 'Protokoll-ID fehlt.');
             header('Location: /protocols');
             exit;
@@ -1168,10 +1242,13 @@ final class ProtocolsController
             $currentProtocol = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$currentProtocol) {
+                error_log('[ProtocolSave] ERROR - Protocol not found in DB');
                 Flash::add('error', 'Protokoll nicht gefunden.');
                 header('Location: /protocols');
                 exit;
             }
+            
+            error_log('[ProtocolSave] Current protocol loaded: ' . $currentProtocol['tenant_name']);
             
             // Transaction starten
             $pdo->beginTransaction();
@@ -1215,8 +1292,11 @@ final class ProtocolsController
             ]);
             
             if (!$updateSuccess) {
+                error_log('[ProtocolSave] ERROR - Update query failed');
                 throw new \Exception('Protokoll-Update fehlgeschlagen');
             }
+            
+            error_log('[ProtocolSave] Protocol updated successfully');
             
             // Änderungen ermitteln
             $changes = [];
@@ -1239,32 +1319,193 @@ final class ProtocolsController
                 $changes[] = 'payload';
             }
             
-            // Protocol Events hinzufügen (robust mit Spalten-Check)
+            // Commit der Transaktion ZUERST - dann Logging
+            $pdo->commit();
+            error_log('[ProtocolSave] Transaction committed successfully');
+            
+            // Protocol Events hinzufügen - NACH Commit!
             try {
-                // Prüfe ob created_by Spalte existiert
-                $stmt = $pdo->query("SHOW COLUMNS FROM protocol_events LIKE 'created_by'");
-                $hasCreatedBy = $stmt->rowCount() > 0;
+                error_log('[ProtocolSave] Adding protocol_events entry...');
                 
-                $user = Auth::user();
-                $userEmail = $user['email'] ?? 'system';
-                $changesDescription = !empty($changes) ? implode(', ', $changes) : 'keine Änderungen';
-                
-                if ($hasCreatedBy) {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO protocol_events (id, protocol_id, type, message, created_by, created_at) 
-                        VALUES (UUID(), ?, 'updated', ?, ?, NOW())
-                    ");
-                    $stmt->execute([$protocolId, 'Protokoll bearbeitet: ' . $changesDescription, $userEmail]);
-                } else {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO protocol_events (id, protocol_id, type, message, created_at) 
-                        VALUES (UUID(), ?, 'updated', ?, NOW())
-                    ");
-                    $stmt->execute([$protocolId, 'Protokoll bearbeitet: ' . $changesDescription]);
+                // Erst prüfen ob Tabelle existiert
+                $tableExists = false;
+                try {
+                    $pdo->query("SELECT 1 FROM protocol_events LIMIT 1");
+                    $tableExists = true;
+                    error_log('[ProtocolSave] protocol_events table exists');
+                } catch (\PDOException $e) {
+                    error_log('[ProtocolSave] protocol_events table does NOT exist: ' . $e->getMessage());
+                    
+                    // Tabelle erstellen
+                    try {
+                        $pdo->exec("
+                            CREATE TABLE IF NOT EXISTS protocol_events (
+                                id VARCHAR(36) PRIMARY KEY,
+                                protocol_id VARCHAR(36) NOT NULL,
+                                type VARCHAR(50) NOT NULL,
+                                message TEXT,
+                                created_by VARCHAR(255),
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                INDEX idx_protocol_id (protocol_id),
+                                INDEX idx_type (type),
+                                INDEX idx_created_at (created_at)
+                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                        ");
+                        $tableExists = true;
+                        error_log('[ProtocolSave] protocol_events table CREATED');
+                    } catch (\PDOException $e2) {
+                        error_log('[ProtocolSave] Failed to create protocol_events table: ' . $e2->getMessage());
+                    }
                 }
-            } catch (\PDOException $e) {
-                // Events Tabelle existiert nicht oder andere DB-Probleme - ignorieren
-                error_log('Protocol events error: ' . $e->getMessage());
+                
+                if ($tableExists) {
+                    $user = Auth::user();
+                    $userEmail = $user['email'] ?? 'system';
+                    $changesDescription = !empty($changes) ? implode(', ', $changes) : 'keine Änderungen';
+                    
+                    // Verwende EventLogger wenn verfügbar
+                    if (class_exists('\App\EventLogger')) {
+                        \App\EventLogger::logProtocolEvent(
+                            $protocolId,
+                            'updated',
+                            'Protokoll bearbeitet: ' . $changesDescription,
+                            $userEmail
+                        );
+                        error_log('[ProtocolSave] Event logged via EventLogger');
+                    } else {
+                    
+                    // Generiere UUID in PHP
+                    // Prüfe ob UuidHelper existiert, sonst verwende Alternative
+                    if (class_exists('\App\UuidHelper')) {
+                        $uuid = \App\UuidHelper::generate();
+                    } else {
+                        // Fallback UUID Generation
+                        $uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                            mt_rand(0, 0xffff),
+                            mt_rand(0, 0x0fff) | 0x4000,
+                            mt_rand(0, 0x3fff) | 0x8000,
+                            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+                        );
+                    }
+                    error_log('[ProtocolSave] Generated UUID: ' . $uuid);
+                    
+                    // Prüfe ob created_by Spalte existiert
+                    $hasCreatedBy = false;
+                    try {
+                        $stmt = $pdo->query("SHOW COLUMNS FROM protocol_events LIKE 'created_by'");
+                        $hasCreatedBy = $stmt->rowCount() > 0;
+                    } catch (\PDOException $e) {
+                        // Ignore
+                    }
+                    
+                    $currentTimestamp = date('Y-m-d H:i:s');
+                    
+                    if ($hasCreatedBy) {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO protocol_events (id, protocol_id, type, message, created_by, created_at) 
+                            VALUES (?, ?, 'updated', ?, ?, ?)
+                        ");
+                        $success = $stmt->execute([
+                            $uuid,
+                            $protocolId, 
+                            'Protokoll bearbeitet: ' . $changesDescription, 
+                            $userEmail,
+                            $currentTimestamp
+                        ]);
+                        error_log('[ProtocolSave] protocol_events INSERT with created_by: ' . ($success ? 'SUCCESS' : 'FAILED'));
+                        if (!$success) {
+                            error_log('[ProtocolSave] Error info: ' . print_r($stmt->errorInfo(), true));
+                        }
+                    } else {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO protocol_events (id, protocol_id, type, message, created_at) 
+                            VALUES (?, ?, 'updated', ?, ?)
+                        ");
+                        $success = $stmt->execute([
+                            $uuid,
+                            $protocolId, 
+                            'Protokoll bearbeitet: ' . $changesDescription,
+                            $currentTimestamp
+                        ]);
+                        error_log('[ProtocolSave] protocol_events INSERT without created_by: ' . ($success ? 'SUCCESS' : 'FAILED'));
+                        if (!$success) {
+                            error_log('[ProtocolSave] Error info: ' . print_r($stmt->errorInfo(), true));
+                        }
+                    }
+                    
+                    // Verify insert
+                    $stmt = $pdo->prepare("SELECT COUNT(*) FROM protocol_events WHERE protocol_id = ?");
+                    $stmt->execute([$protocolId]);
+                    $count = $stmt->fetchColumn();
+                    error_log('[ProtocolSave] Total protocol_events for this protocol: ' . $count);
+                    
+                    // Debug: Zeige letzte Einträge
+                    $stmt = $pdo->prepare("SELECT id, type, message, created_at FROM protocol_events WHERE protocol_id = ? ORDER BY created_at DESC LIMIT 3");
+                    $stmt->execute([$protocolId]);
+                    $lastEvents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    error_log('[ProtocolSave] Last events: ' . print_r($lastEvents, true));
+                    } // Ende else von EventLogger check
+                }
+            } catch (\Throwable $e) {
+                error_log('[ProtocolSave] Protocol events error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            }
+            
+            // System-Logging - NACH Commit!
+            try {
+                error_log('[ProtocolSave] Calling SystemLogger...');
+                
+                // Erst prüfen ob system_log Tabelle existiert
+                $tableExists = false;
+                try {
+                    $pdo->query("SELECT 1 FROM system_log LIMIT 1");
+                    $tableExists = true;
+                    error_log('[ProtocolSave] system_log table exists');
+                } catch (\PDOException $e) {
+                    error_log('[ProtocolSave] system_log table does NOT exist: ' . $e->getMessage());
+                    
+                    // Tabelle erstellen
+                    try {
+                        $pdo->exec("
+                            CREATE TABLE IF NOT EXISTS system_log (
+                                id VARCHAR(36) PRIMARY KEY,
+                                user_email VARCHAR(255),
+                                user_ip VARCHAR(45),
+                                action_type VARCHAR(50) NOT NULL,
+                                action_description TEXT NOT NULL,
+                                resource_type VARCHAR(50),
+                                resource_id VARCHAR(36),
+                                additional_data JSON,
+                                request_method VARCHAR(10),
+                                request_url TEXT,
+                                user_agent TEXT,
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                INDEX idx_user_email (user_email),
+                                INDEX idx_action_type (action_type),
+                                INDEX idx_created_at (created_at)
+                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                        ");
+                        $tableExists = true;
+                        error_log('[ProtocolSave] system_log table CREATED');
+                    } catch (\PDOException $e2) {
+                        error_log('[ProtocolSave] Failed to create system_log table: ' . $e2->getMessage());
+                    }
+                }
+                
+                if ($tableExists && class_exists('\\App\\SystemLogger')) {
+                    \App\SystemLogger::logProtocolUpdated($protocolId, [
+                        'type' => $updateData['type'],
+                        'tenant_name' => $updateData['tenant_name'],
+                        'city' => $payload['address']['city'] ?? '',
+                        'street' => $payload['address']['street'] ?? '',
+                        'unit' => $payload['address']['unit_label'] ?? ''
+                    ], $changes);
+                    error_log('[ProtocolSave] SystemLogger called successfully');
+                } else {
+                    error_log('[ProtocolSave] SystemLogger not available or table missing');
+                }
+            } catch (\Throwable $e) {
+                error_log('[ProtocolSave] System logging error: ' . $e->getMessage());
             }
             
             // Versionierung (falls protocol_versions Tabelle existiert)
@@ -1276,6 +1517,9 @@ final class ProtocolsController
                     $stmt = $pdo->prepare("SELECT COALESCE(MAX(version_no), 0) + 1 FROM protocol_versions WHERE protocol_id = ?");
                     $stmt->execute([$protocolId]);
                     $nextVersion = (int)$stmt->fetchColumn();
+                    
+                    $user = Auth::user();
+                    $userEmail = $user['email'] ?? 'system';
                     
                     $versionData = [
                         'protocol_id' => $protocolId,
@@ -1300,29 +1544,14 @@ final class ProtocolsController
                 // Versionierung nicht verfügbar - ignorieren
                 error_log('Protocol versioning error: ' . $e->getMessage());
             }
-            
-            // Commit der Transaktion
-            $pdo->commit();
-            
-            // System-Logging (nach Commit)
-            try {
-                if (class_exists('\\App\\SystemLogger')) {
-                    \App\SystemLogger::logProtocolUpdated($protocolId, [
-                        'type' => $updateData['type'],
-                        'tenant_name' => $updateData['tenant_name'],
-                        'city' => $payload['address']['city'] ?? '',
-                        'street' => $payload['address']['street'] ?? '',
-                        'unit' => $payload['address']['unit_label'] ?? ''
-                    ], $changes);
-                }
-            } catch (\Throwable $e) {
-                // Logging-Fehler ignorieren
-                error_log('System logging error: ' . $e->getMessage());
-            }
+
             
             // Success-Message
             $changeText = !empty($changes) ? ' Änderungen: ' . implode(', ', $changes) : '';
             Flash::add('success', 'Protokoll erfolgreich gespeichert.' . $changeText);
+            
+            error_log('[ProtocolSave] SUCCESS - Changes: ' . implode(', ', $changes));
+            error_log('[ProtocolSave] Redirecting to: /protocols/edit?id=' . $protocolId);
             
             // Redirect (nur wenn Headers noch nicht gesendet)
             if (!headers_sent()) {
@@ -1341,7 +1570,9 @@ final class ProtocolsController
                 $pdo->rollBack();
             }
             
-            error_log('Protocol save error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            error_log('[ProtocolSave] EXCEPTION: ' . $e->getMessage());
+            error_log('[ProtocolSave] Stack trace: ' . $e->getTraceAsString());
+            error_log('[ProtocolSave] File: ' . $e->getFile() . ':' . $e->getLine());
             
             // Error logging
             try {
