@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - 2025-09-07
+
+### 🔧 Finale Lösung - Settings & Logging
+- **BEHOBEN:** Settings-Speicherung funktioniert jetzt zuverlässig
+- **BEHOBEN:** Alle Änderungen werden korrekt im System-Log protokolliert
+- **BEHOBEN:** Datenbank-Schema vollständig korrigiert
+- **GETESTET:** Umfassende Tests im Docker-Container durchgeführt
+- **VERIFIZIERT:** Web-Interface speichert alle Einstellungen korrekt
+
+### 🛠️ Technische Details
+- Settings-Tabelle mit DEFAULT CURRENT_TIMESTAMP für updated_at
+- System_log-Tabelle mit korrekten Spalten und Indizes
+- Konsistente UTF8MB4 Kollation überall
+- Robuste Fehlerbehandlung in allen Komponenten
+
 ## [2.0.2] - 2025-09-07
 
 ### 🔧 Kritische Fehlerbehebung - Settings & Logging
