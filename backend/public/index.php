@@ -117,9 +117,8 @@ switch ($path) {
         break;
 
     case '/protocols/save':
-        // WORKING SAVE SYSTEM - GARANTIERT FUNKTIONIEREND
-        error_log('ROUTING: Directing to working_save.php');
-        include __DIR__ . '/working_save.php';
+        Auth::requireAuth();
+        (new ProtocolsController())->save();
         break;
 
     case '/protocols/delete':
