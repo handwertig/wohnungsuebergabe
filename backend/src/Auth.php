@@ -102,4 +102,16 @@ final class Auth
         $u = self::user();
         return $u && ($u['role'] ?? '') === 'eigentuemer';
     }
+    
+    public static function currentUserEmail(): ?string
+    {
+        $u = self::user();
+        return $u['email'] ?? null;
+    }
+    
+    public static function currentUserId(): ?string
+    {
+        $u = self::user();
+        return $u['id'] ?? null;
+    }
 }

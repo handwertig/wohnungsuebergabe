@@ -19,6 +19,8 @@ use App\Controllers\ManagersController;
 use App\Controllers\ObjectsController;
 use App\Controllers\UsersController;
 use App\Controllers\SignatureController;
+use App\Controllers\SignaturesController;
+use App\Controllers\MailController;
 use App\Auth;
 
 // Pfad ermitteln
@@ -146,6 +148,12 @@ switch ($path) {
     case '/protocols/send':
         Auth::requireAuth();
         (new ProtocolsController())->send();  // ?protocol_id=&to=owner|manager|tenant
+        break;
+
+    // E-Mail-Versand
+    case '/mail/send':
+        Auth::requireAuth();
+        (new MailController())->send();  // ?protocol_id=&to=owner|manager|tenant&version=
         break;
 
     // NEUE ROUTEN: PDF-Versionierung und API
@@ -411,6 +419,41 @@ switch ($path) {
     case '/signature/verify':
         Auth::requireAuth();
         (new SignatureController())->verify();
+        break;
+
+    // Unterschriften-Verwaltung
+    case '/signatures':
+        Auth::requireAuth();
+        (new SignaturesController())->index();
+        break;
+
+    case '/signatures/add':
+        Auth::requireAuth();
+        (new SignaturesController())->add();
+        break;
+
+    case '/signatures/save':
+        Auth::requireAuth();
+        (new SignaturesController())->save();
+        break;
+
+    case '/signatures/manage':
+        Auth::requireAuth();
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+            (new SignaturesController())->manageSave();
+        } else {
+            (new SignaturesController())->manage();
+        }
+        break;
+
+    case '/signatures/delete':
+        Auth::requireAuth();
+        (new SignaturesController())->delete();
+        break;
+
+    case '/signatures/remove':
+        Auth::requireAuth();
+        (new SignaturesController())->remove();
         break;
 
     // 404 JSON

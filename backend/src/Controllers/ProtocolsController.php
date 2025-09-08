@@ -9,6 +9,7 @@ use App\View;
 use App\Flash;
 use App\Csrf;
 use App\Settings;
+use App\SystemLogger;
 use PDO;
 
 final class ProtocolsController
@@ -291,6 +292,20 @@ final class ProtocolsController
         }
         
         // Protokoll-Zugriff loggen
+        if (class_exists('\\App\\SystemLogger')) {
+            \App\SystemLogger::logProtocolViewed($id, [
+                'type' => $protocol['type'] ?? '',
+                'tenant_name' => $protocol['tenant_name'] ?? '',
+                'city' => $protocol['city'] ?? '',
+                'street' => $protocol['street'] ?? '',
+                'unit' => $protocol['unit_label'] ?? ''
+            ]);
+        }
+        
+        // Event-Logging hinzufügen
+        $this->logProtocolEvent($pdo, $id, 'other', 'Protokoll angezeigt');
+        
+        // SystemLogger für system_log Tabelle
         if (class_exists('\\App\\SystemLogger')) {
             \App\SystemLogger::logProtocolViewed($id, [
                 'type' => $protocol['type'] ?? '',
@@ -775,10 +790,152 @@ final class ProtocolsController
     /** Renderiert den Signaturen Tab */
     private function renderSignaturesTab(string $protocolId): string
     {
-        $html = '<div class="alert alert-info">';
-        $html .= '<i class="bi bi-info-circle me-2"></i>';
-        $html .= 'Digitale Unterschriften werden bald verfügbar sein.';
+        $pdo = Database::pdo();
+        
+        // Prüfe ob Signatur-Tabellen existieren
+        $signaturesTableExists = false;
+        $signersTableExists = false;
+        
+        try {
+            $stmt = $pdo->query("SHOW TABLES LIKE 'protocol_signatures'");
+            $signaturesTableExists = $stmt->rowCount() > 0;
+        } catch (\Exception $e) {
+            // Table doesn't exist
+        }
+        
+        try {
+            $stmt = $pdo->query("SHOW TABLES LIKE 'protocol_signers'");
+            $signersTableExists = $stmt->rowCount() > 0;
+        } catch (\Exception $e) {
+            // Table doesn't exist
+        }
+        
+        $signatures = [];
+        if ($signaturesTableExists && $signersTableExists) {
+            // Signaturen aus Datenbank laden mit JOIN zu protocol_signers
+            try {
+                $stmt = $pdo->prepare("
+                    SELECT ps.id, ps.protocol_id, ps.signer_id, ps.type, ps.img_path, 
+                           ps.signed_at, ps.created_at,
+                           psi.name as signer_name, psi.role as signer_role, psi.email as signer_email
+                    FROM protocol_signatures ps
+                    JOIN protocol_signers psi ON ps.signer_id = psi.id
+                    WHERE ps.protocol_id = ? 
+                    ORDER BY ps.created_at DESC
+                ");
+                $stmt->execute([$protocolId]);
+                $signatures = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (\Exception $e) {
+                error_log('Protocol signatures query error: ' . $e->getMessage());
+                $signatures = [];
+            }
+        }
+        
+        $html = '<div class="card">';
+        $html .= '<div class="card-header d-flex justify-content-between align-items-center">';
+        $html .= '<h5 class="mb-0">Digitale Unterschriften</h5>';
+        $html .= '<div class="btn-group btn-group-sm">';
+        if ($signaturesTableExists && $signersTableExists) {
+            $html .= '<a href="/signatures?protocol_id=' . self::h($protocolId) . '" class="btn btn-outline-primary">';
+            $html .= '<i class="bi bi-pen me-1"></i>Unterschriften verwalten';
+            $html .= '</a>';
+        }
         $html .= '</div>';
+        $html .= '</div>';
+        $html .= '<div class="card-body">';
+        
+        if (!$signaturesTableExists || !$signersTableExists) {
+            $html .= '<div class="alert alert-warning">';
+            $html .= '<i class="bi bi-exclamation-triangle me-2"></i>';
+            $html .= 'Unterschriften-System ist noch nicht eingerichtet. Die Datenbank-Migrationen für protocol_signatures und protocol_signers fehlen.';
+            $html .= '</div>';
+        } elseif (empty($signatures)) {
+            $html .= '<div class="alert alert-info">';
+            $html .= '<i class="bi bi-info-circle me-2"></i>';
+            $html .= 'Noch keine Unterschriften vorhanden. Klicken Sie auf "Unterschriften verwalten" um Signaturen hinzuzufügen.';
+            $html .= '</div>';
+        } else {
+            $html .= '<div class="table-responsive">';
+            $html .= '<table class="table table-sm">';
+            $html .= '<thead>';
+            $html .= '<tr>';
+            $html .= '<th>Name</th>';
+            $html .= '<th>Rolle</th>';
+            $html .= '<th>Typ</th>';
+            $html .= '<th>Datum</th>';
+            $html .= '<th class="text-end">Aktionen</th>';
+            $html .= '</tr>';
+            $html .= '</thead>';
+            $html .= '<tbody>';
+            
+            foreach ($signatures as $sig) {
+                $html .= '<tr>';
+                $html .= '<td>' . self::h($sig['signer_name']) . '</td>';
+                
+                // Rolle mit Badge
+                $roleColor = match($sig['signer_role']) {
+                    'mieter' => 'bg-primary',
+                    'eigentuemer' => 'bg-success', 
+                    'anwesend' => 'bg-info',
+                    default => 'bg-secondary'
+                };
+                $html .= '<td><span class="badge ' . $roleColor . '">' . ucfirst($sig['signer_role']) . '</span></td>';
+                
+                // Typ
+                $typeColor = match($sig['type']) {
+                    'on_device' => 'bg-success',
+                    'docusign' => 'bg-info', 
+                    default => 'bg-secondary'
+                };
+                $typeLabel = match($sig['type']) {
+                    'on_device' => 'Vor Ort',
+                    'docusign' => 'DocuSign',
+                    default => ucfirst($sig['type'])
+                };
+                $html .= '<td><span class="badge ' . $typeColor . '">' . $typeLabel . '</span></td>';
+                
+                $html .= '<td>' . ($sig['signed_at'] ? date('d.m.Y H:i', strtotime($sig['signed_at'])) : date('d.m.Y H:i', strtotime($sig['created_at']))) . '</td>';
+                
+                // Aktionen
+                $html .= '<td class="text-end">';
+                $html .= '<div class="btn-group btn-group-sm">';
+                if (!empty($sig['img_path']) && file_exists($sig['img_path'])) {
+                    $html .= '<button class="btn btn-outline-primary" onclick="showSignature(\'' . self::h($sig['id']) . '\')" title="Unterschrift anzeigen">';
+                    $html .= '<i class="bi bi-eye"></i>';
+                    $html .= '</button>';
+                }
+                $html .= '<a href="/signatures/remove?protocol_id=' . self::h($protocolId) . '&signer_id=' . self::h($sig['signer_id']) . '" class="btn btn-outline-danger" onclick="return confirm(\'Unterschrift wirklich entfernen?\')" title="Löschen">';
+                $html .= '<i class="bi bi-trash"></i>';
+                $html .= '</a>';
+                $html .= '</div>';
+                $html .= '</td>';
+                $html .= '</tr>';
+            }
+            
+            $html .= '</tbody>';
+            $html .= '</table>';
+            $html .= '</div>';
+        }
+        
+        // Hinweise
+        $html .= '<div class="mt-3">';
+        $html .= '<small class="text-muted">';
+        $html .= '<i class="bi bi-info-circle me-1"></i>';
+        $html .= 'Digitale Unterschriften sind rechtlich gültig und entsprechen §126a BGB. ';
+        $html .= 'Alle Unterschriften werden mit Zeitstempel protokolliert.';
+        $html .= '</small>';
+        $html .= '</div>';
+        
+        $html .= '</div>'; // card-body
+        $html .= '</div>'; // card
+        
+        // JavaScript für Unterschrift-Aktionen
+        $html .= '<script>';
+        $html .= 'function showSignature(id) {';
+        $html .= '  // TODO: Modal mit Unterschrift öffnen';
+        $html .= '  alert("Unterschrift anzeigen: " + id);';
+        $html .= '}';
+        $html .= '</script>';
         
         return $html;
     }
@@ -786,10 +943,130 @@ final class ProtocolsController
     /** Renderiert den PDF-Versionierung Tab */
     private function renderPDFVersionsTab(string $protocolId): string
     {
-        $html = '<div class="alert alert-info">';
-        $html .= '<i class="bi bi-info-circle me-2"></i>';
-        $html .= 'PDF-Versionierung wird bald verfügbar sein.';
+        $pdo = Database::pdo();
+        
+        // Prüfe ob protocol_versions Tabelle existiert
+        try {
+            $stmt = $pdo->query("SHOW TABLES LIKE 'protocol_versions'");
+            $tableExists = $stmt->rowCount() > 0;
+        } catch (\Exception $e) {
+            $tableExists = false;
+        }
+        
+        $versions = [];
+        if ($tableExists) {
+            // Prüfe welche Spalten existieren
+            try {
+                $stmt = $pdo->query("SHOW COLUMNS FROM protocol_versions");
+                $columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                // Bestimme korrekte Spalten-Namen
+                $versionCol = in_array('version_number', $columns) ? 'version_number' : 'version_no';
+                
+                // PDF-Versionen aus Datenbank laden
+                $sql = "SELECT $versionCol as version_num, pdf_path, signed_pdf_path, created_at 
+                        FROM protocol_versions 
+                        WHERE protocol_id = ? 
+                        ORDER BY $versionCol DESC";
+                        
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$protocolId]);
+                $versions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (\Exception $e) {
+                error_log('Protocol versions query error: ' . $e->getMessage());
+                $versions = [];
+            }
+        }
+        
+        $html = '<div class="card">';
+        $html .= '<div class="card-header d-flex justify-content-between align-items-center">';
+        $html .= '<h5 class="mb-0">PDF-Versionen</h5>';
+        $html .= '<div class="btn-group btn-group-sm">';
+        $html .= '<a href="/protocols/pdf?protocol_id=' . self::h($protocolId) . '" target="_blank" class="btn btn-outline-primary">';
+        $html .= '<i class="bi bi-file-pdf me-1"></i>Aktuelle PDF generieren';
+        $html .= '</a>';
+        $html .= '<a href="/mail/send?protocol_id=' . self::h($protocolId) . '&to=owner" class="btn btn-outline-success">';
+        $html .= '<i class="bi bi-envelope me-1"></i>Per E-Mail versenden';
+        $html .= '</a>';
         $html .= '</div>';
+        $html .= '</div>';
+        $html .= '<div class="card-body">';
+        
+        if (!$tableExists) {
+            $html .= '<div class="alert alert-warning">';
+            $html .= '<i class="bi bi-exclamation-triangle me-2"></i>';
+            $html .= 'PDF-Versionierung ist noch nicht eingerichtet. Die Datenbank-Migration für protocol_versions fehlt.';
+            $html .= '</div>';
+        } elseif (empty($versions)) {
+            $html .= '<div class="alert alert-info">';
+            $html .= '<i class="bi bi-info-circle me-2"></i>';
+            $html .= 'Noch keine PDF-Versionen vorhanden. Klicken Sie auf "Aktuelle PDF generieren" um eine PDF zu erstellen.';
+            $html .= '</div>';
+        } else {
+            $html .= '<div class="table-responsive">';
+            $html .= '<table class="table table-sm">';
+            $html .= '<thead>';
+            $html .= '<tr>';
+            $html .= '<th>Version</th>';
+            $html .= '<th>Erstellt</th>';
+            $html .= '<th>Größe</th>';
+            $html .= '<th>Status</th>';
+            $html .= '<th class="text-end">Aktionen</th>';
+            $html .= '</tr>';
+            $html .= '</thead>';
+            $html .= '<tbody>';
+            
+            foreach ($versions as $version) {
+                $html .= '<tr>';
+                $html .= '<td><span class="badge bg-primary">v' . self::h($version['version_num']) . '</span></td>';
+                $html .= '<td>' . date('d.m.Y H:i', strtotime($version['created_at'])) . '</td>';
+                
+                // Größe bestimmen falls Datei existiert
+                $fileSize = '-';
+                if (!empty($version['signed_pdf_path']) && file_exists($version['signed_pdf_path'])) {
+                    $fileSize = $this->formatFileSize(filesize($version['signed_pdf_path']));
+                } elseif (!empty($version['pdf_path']) && file_exists($version['pdf_path'])) {
+                    $fileSize = $this->formatFileSize(filesize($version['pdf_path']));
+                }
+                $html .= '<td>' . $fileSize . '</td>';
+                
+                // Status bestimmen
+                $hasSignedPdf = !empty($version['signed_pdf_path']) && file_exists($version['signed_pdf_path']);
+                $hasNormalPdf = !empty($version['pdf_path']) && file_exists($version['pdf_path']);
+                
+                if ($hasSignedPdf) {
+                    $html .= '<td><span class="badge bg-success">Signiert</span></td>';
+                } elseif ($hasNormalPdf) {
+                    $html .= '<td><span class="badge bg-warning">Unsigniert</span></td>';
+                } else {
+                    $html .= '<td><span class="badge bg-danger">Fehlt</span></td>';
+                }
+                
+                // Aktionen
+                $html .= '<td class="text-end">';
+                $html .= '<div class="btn-group btn-group-sm">';
+                
+                if ($hasSignedPdf || $hasNormalPdf) {
+                    $html .= '<a href="/protocols/pdf?protocol_id=' . self::h($protocolId) . '&version=' . $version['version_num'] . '" target="_blank" class="btn btn-outline-primary" title="PDF ansehen">';
+                    $html .= '<i class="bi bi-eye"></i>';
+                    $html .= '</a>';
+                    $html .= '<a href="/mail/send?protocol_id=' . self::h($protocolId) . '&version=' . $version['version_num'] . '&to=owner" class="btn btn-outline-success" title="Per E-Mail versenden">';
+                    $html .= '<i class="bi bi-envelope"></i>';
+                    $html .= '</a>';
+                }
+                
+                $html .= '</div>';
+                $html .= '</td>';
+                $html .= '</tr>';
+            }
+            
+            $html .= '</tbody>';
+            $html .= '</table>';
+            $html .= '</div>';
+        }
+        
+        $html .= '</div>'; // card-body
+        $html .= '</div>'; // card
         
         return $html;
     }
@@ -797,12 +1074,253 @@ final class ProtocolsController
     /** Renderiert den Protokoll-Log Tab */
     private function renderProtocolLogTab(string $protocolId): string
     {
-        $html = '<div class="alert alert-info">';
-        $html .= '<i class="bi bi-info-circle me-2"></i>';
-        $html .= 'Protokoll-Logs werden bald verfügbar sein.';
+        $pdo = Database::pdo();
+        
+        // Prüfe welche Tabellen existieren
+        $eventsTableExists = false;
+        $emailLogTableExists = false;
+        
+        try {
+            $stmt = $pdo->query("SHOW TABLES LIKE 'protocol_events'");
+            $eventsTableExists = $stmt->rowCount() > 0;
+        } catch (\Exception $e) {
+            // Table doesn't exist
+        }
+        
+        try {
+            $stmt = $pdo->query("SHOW TABLES LIKE 'email_log'");
+            $emailLogTableExists = $stmt->rowCount() > 0;
+        } catch (\Exception $e) {
+            // Table doesn't exist
+        }
+        
+        $events = [];
+        $emailLogs = [];
+        
+        // Protokoll-Events laden falls Tabelle existiert
+        if ($eventsTableExists) {
+            try {
+                // Prüfe welche Spalten in protocol_events existieren
+                $stmt = $pdo->query("SHOW COLUMNS FROM protocol_events");
+                $columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                $hasMeta = in_array('meta', $columns);
+                $hasCreatedBy = in_array('created_by', $columns);
+                
+                // Query an verfügbare Spalten anpassen
+                $selectFields = 'id, type, message, created_at';
+                if ($hasCreatedBy) {
+                    $selectFields .= ', created_by';
+                }
+                if ($hasMeta) {
+                    $selectFields .= ', meta';
+                }
+                
+                $stmt = $pdo->prepare("
+                    SELECT $selectFields
+                    FROM protocol_events 
+                    WHERE protocol_id = ? 
+                    ORDER BY created_at DESC
+                ");
+                $stmt->execute([$protocolId]);
+                $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (\Exception $e) {
+                error_log('Protocol events query error: ' . $e->getMessage());
+                $events = [];
+            }
+        }
+        
+        // E-Mail-Logs laden falls Tabelle existiert
+        if ($emailLogTableExists) {
+            try {
+                $stmt = $pdo->prepare("
+                    SELECT id, recipient_type, to_email, subject, status, 
+                           created_at, sent_at, error_msg 
+                    FROM email_log 
+                    WHERE protocol_id = ? 
+                    ORDER BY created_at DESC
+                ");
+                $stmt->execute([$protocolId]);
+                $emailLogs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (\Exception $e) {
+                error_log('Email log query error: ' . $e->getMessage());
+                $emailLogs = [];
+            }
+        }
+        
+        $html = '<div class="card">';
+        $html .= '<div class="card-header">';
+        $html .= '<h5 class="mb-0">Protokoll-Aktivitäten</h5>';
         $html .= '</div>';
+        $html .= '<div class="card-body">';
+        
+        // Zeige Warnung falls Tabellen fehlen
+        if (!$eventsTableExists && !$emailLogTableExists) {
+            $html .= '<div class="alert alert-warning">';
+            $html .= '<i class="bi bi-exclamation-triangle me-2"></i>';
+            $html .= 'Aktivitäts-Logging ist noch nicht eingerichtet. Die Datenbank-Migrationen für protocol_events und email_log fehlen.';
+            $html .= '</div>';
+        } else {
+            // Tabs für Events und E-Mails
+            $html .= '<ul class="nav nav-pills mb-3" role="tablist">';
+            $html .= '<li class="nav-item">';
+            $html .= '<a class="nav-link active" data-bs-toggle="pill" href="#log-events">Ereignisse (' . count($events) . ')</a>';
+            $html .= '</li>';
+            $html .= '<li class="nav-item">';
+            $html .= '<a class="nav-link" data-bs-toggle="pill" href="#log-emails">E-Mails (' . count($emailLogs) . ')</a>';
+            $html .= '</li>';
+            $html .= '</ul>';
+            
+            $html .= '<div class="tab-content">';
+            
+            // === EREIGNISSE TAB ===
+            $html .= '<div class="tab-pane fade show active" id="log-events">';
+            
+            if (!$eventsTableExists) {
+                $html .= '<div class="alert alert-warning">';
+                $html .= '<i class="bi bi-exclamation-triangle me-2"></i>';
+                $html .= 'Ereignis-Logging ist nicht verfügbar. Tabelle protocol_events fehlt.';
+                $html .= '</div>';
+            } elseif (empty($events)) {
+                $html .= '<div class="alert alert-info">';
+                $html .= '<i class="bi bi-info-circle me-2"></i>';
+                $html .= 'Noch keine Ereignisse protokolliert.';
+                $html .= '</div>';
+            } else {
+                $html .= '<div class="table-responsive">';
+                $html .= '<table class="table table-sm">';
+                $html .= '<thead>';
+                $html .= '<tr>';
+                $html .= '<th>Zeitpunkt</th>';
+                $html .= '<th>Ereignis</th>';
+                $html .= '<th>Details</th>';
+                $html .= '</tr>';
+                $html .= '</thead>';
+                $html .= '<tbody>';
+                
+                foreach ($events as $event) {
+                    $html .= '<tr>';
+                    $html .= '<td><small>' . date('d.m.Y H:i:s', strtotime($event['created_at'])) . '</small></td>';
+                    
+                    // Event-Typ mit Icon und Farbe
+                    $eventInfo = $this->getEventInfo($event['type']);
+                    $html .= '<td>';
+                    $html .= '<i class="bi bi-' . $eventInfo['icon'] . ' text-' . $eventInfo['color'] . ' me-2"></i>';
+                    $html .= $eventInfo['label'];
+                    $html .= '</td>';
+                    
+                    $html .= '<td><small>' . self::h($event['message'] ?? '') . '</small></td>';
+                    $html .= '</tr>';
+                }
+                
+                $html .= '</tbody>';
+                $html .= '</table>';
+                $html .= '</div>';
+            }
+            
+            $html .= '</div>'; // tab-pane events
+            
+            // === E-MAILS TAB ===
+            $html .= '<div class="tab-pane fade" id="log-emails">';
+            
+            if (!$emailLogTableExists) {
+                $html .= '<div class="alert alert-warning">';
+                $html .= '<i class="bi bi-exclamation-triangle me-2"></i>';
+                $html .= 'E-Mail-Logging ist nicht verfügbar. Tabelle email_log fehlt.';
+                $html .= '</div>';
+            } elseif (empty($emailLogs)) {
+                $html .= '<div class="alert alert-info">';
+                $html .= '<i class="bi bi-info-circle me-2"></i>';
+                $html .= 'Noch keine E-Mails versendet.';
+                $html .= '</div>';
+            } else {
+                $html .= '<div class="table-responsive">';
+                $html .= '<table class="table table-sm">';
+                $html .= '<thead>';
+                $html .= '<tr>';
+                $html .= '<th>Zeitpunkt</th>';
+                $html .= '<th>Empfänger</th>';
+                $html .= '<th>E-Mail</th>';
+                $html .= '<th>Betreff</th>';
+                $html .= '<th>Status</th>';
+                $html .= '</tr>';
+                $html .= '</thead>';
+                $html .= '<tbody>';
+                
+                foreach ($emailLogs as $email) {
+                    $html .= '<tr>';
+                    $html .= '<td><small>' . date('d.m.Y H:i:s', strtotime($email['created_at'])) . '</small></td>';
+                    
+                    // Empfänger-Typ
+                    $recipientColor = match($email['recipient_type']) {
+                        'owner' => 'bg-success',
+                        'manager' => 'bg-info',
+                        'tenant' => 'bg-primary',
+                        'custom' => 'bg-secondary',
+                        default => 'bg-secondary'
+                    };
+                    $recipientLabel = match($email['recipient_type']) {
+                        'owner' => 'Eigentümer',
+                        'manager' => 'Hausverwaltung',
+                        'tenant' => 'Mieter',
+                        'custom' => 'Benutzerdefiniert',
+                        default => ucfirst($email['recipient_type'])
+                    };
+                    $html .= '<td><span class="badge ' . $recipientColor . '">' . $recipientLabel . '</span></td>';
+                    
+                    $html .= '<td><small>' . self::h($email['to_email']) . '</small></td>';
+                    $html .= '<td><small>' . self::h($email['subject']) . '</small></td>';
+                    
+                    // Status
+                    $statusColor = match($email['status']) {
+                        'sent' => 'bg-success',
+                        'failed' => 'bg-danger',
+                        'queued' => 'bg-warning text-dark',
+                        default => 'bg-secondary'
+                    };
+                    $statusIcon = match($email['status']) {
+                        'sent' => 'check-circle',
+                        'failed' => 'x-circle',
+                        'queued' => 'clock',
+                        default => 'question-circle'
+                    };
+                    $html .= '<td>';
+                    $html .= '<span class="badge ' . $statusColor . '">';
+                    $html .= '<i class="bi bi-' . $statusIcon . ' me-1"></i>' . ucfirst($email['status']);
+                    $html .= '</span>';
+                    if (!empty($email['error_msg'])) {
+                        $html .= '<br><small class="text-danger">' . self::h(substr($email['error_msg'], 0, 100)) . '</small>';
+                    }
+                    $html .= '</td>';
+                    $html .= '</tr>';
+                }
+                
+                $html .= '</tbody>';
+                $html .= '</table>';
+                $html .= '</div>';
+            }
+            
+            $html .= '</div>'; // tab-pane emails
+            $html .= '</div>'; // tab-content
+        }
+        
+        $html .= '</div>'; // card-body
+        $html .= '</div>'; // card
         
         return $html;
+    }
+    
+    /** Hilfsmethode für Event-Informationen */
+    private function getEventInfo(string $eventType): array
+    {
+        return match($eventType) {
+            'signed_by_tenant' => ['icon' => 'pen', 'color' => 'primary', 'label' => 'Von Mieter unterschrieben'],
+            'signed_by_owner' => ['icon' => 'pen', 'color' => 'success', 'label' => 'Von Eigentümer unterschrieben'],
+            'sent_owner' => ['icon' => 'envelope', 'color' => 'success', 'label' => 'An Eigentümer gesendet'],
+            'sent_manager' => ['icon' => 'envelope', 'color' => 'info', 'label' => 'An Hausverwaltung gesendet'],
+            'sent_tenant' => ['icon' => 'envelope', 'color' => 'primary', 'label' => 'An Mieter gesendet'],
+            'other' => ['icon' => 'info-circle', 'color' => 'secondary', 'label' => 'Sonstiges Ereignis'],
+            default => ['icon' => 'question-circle', 'color' => 'secondary', 'label' => ucfirst($eventType)]
+        };
     }
 
     // Methoden-Aliase und Platzhalter
@@ -897,22 +1415,37 @@ final class ProtocolsController
             // Änderungen ermitteln
             $changes = [];
             if ($currentProtocol['tenant_name'] !== $updateData['tenant_name']) {
-                $changes[] = 'tenant_name';
+                $changes[] = 'Mieter: ' . $currentProtocol['tenant_name'] . ' → ' . $updateData['tenant_name'];
             }
             if ($currentProtocol['type'] !== $updateData['type']) {
-                $changes[] = 'type';
+                $changes[] = 'Typ: ' . $currentProtocol['type'] . ' → ' . $updateData['type'];
             }
             if ($currentProtocol['owner_id'] !== $updateData['owner_id']) {
-                $changes[] = 'owner_id';
+                $changes[] = 'Eigentümer geändert';
             }
             if ($currentProtocol['manager_id'] !== $updateData['manager_id']) {
-                $changes[] = 'manager_id';
+                $changes[] = 'Hausverwaltung geändert';
             }
             
             // Payload-Änderungen prüfen
             $oldPayload = json_decode($currentProtocol['payload'] ?? '{}', true) ?: [];
             if (json_encode($oldPayload) !== json_encode($payload)) {
-                $changes[] = 'payload';
+                $changes[] = 'Protokolldaten aktualisiert';
+            }
+            
+            // EVENT LOGGING HINZUFÜGEN
+            $this->logProtocolEvent($pdo, $protocolId, 'other', 
+                'Protokoll bearbeitet' . (!empty($changes) ? ': ' . implode(', ', $changes) : ''));
+            
+            // SystemLogger für system_log Tabelle
+            if (class_exists('\\App\\SystemLogger')) {
+                \App\SystemLogger::logProtocolUpdated($protocolId, [
+                    'type' => $updateData['type'],
+                    'tenant_name' => $updateData['tenant_name'],
+                    'city' => $protocol['city'] ?? '',
+                    'street' => $protocol['street'] ?? '',
+                    'unit' => $protocol['unit_label'] ?? ''
+                ], $changes);
             }
             
             // Commit der Transaktion
@@ -992,6 +1525,21 @@ final class ProtocolsController
             // Transaction starten
             $pdo->beginTransaction();
             
+            // Event-Logging vor dem Löschen
+            $this->logProtocolEvent($pdo, $protocolId, 'other', 
+                'Protokoll gelöscht: ' . ($protocol['tenant_name'] ?? 'Unbekannt'));
+            
+            // SystemLogger für system_log Tabelle
+            if (class_exists('\\App\\SystemLogger')) {
+                \App\SystemLogger::logProtocolDeleted($protocolId, [
+                    'type' => $protocol['type'] ?? '',
+                    'tenant_name' => $protocol['tenant_name'] ?? '',
+                    'city' => $protocol['city'] ?? '',
+                    'street' => $protocol['street'] ?? '',
+                    'unit' => $protocol['unit_label'] ?? ''
+                ]);
+            }
+            
             // Soft-Delete durchführen
             $stmt = $pdo->prepare("UPDATE protocols SET deleted_at = NOW() WHERE id = ?");
             $success = $stmt->execute([$protocolId]);
@@ -1050,6 +1598,20 @@ final class ProtocolsController
                 http_response_code(404);
                 echo 'Protokoll nicht gefunden';
                 return;
+            }
+            
+            // Event-Logging für PDF-Generierung
+            $this->logProtocolEvent($pdo, $protocolId, 'other', 'PDF generiert (Version: ' . $version . ')');
+            
+            // SystemLogger für system_log Tabelle
+            if (class_exists('\\App\\SystemLogger')) {
+                \App\SystemLogger::logPdfGenerated($protocolId, [
+                    'type' => 'Protokoll',
+                    'tenant_name' => 'PDF-Download',
+                    'city' => '',
+                    'street' => '',
+                    'unit' => ''
+                ], 'protocol_pdf');
             }
             
             // Fallback: Generiere einfaches PDF
@@ -1215,12 +1777,13 @@ final class ProtocolsController
         echo $html;
     }
 
-    /** PDF per Mail versenden */
+    /** PDF per Mail versenden - Redirect to MailController */
     public function send(): void
     {
         Auth::requireAuth();
         $protocolId = (string)($_GET['protocol_id'] ?? '');
         $to = (string)($_GET['to'] ?? 'owner');
+        $version = (string)($_GET['version'] ?? '');
         
         if ($protocolId === '') { 
             Flash::add('error', 'Protokoll-ID fehlt.'); 
@@ -1228,9 +1791,14 @@ final class ProtocolsController
             return; 
         }
         
-        // Für jetzt: Placeholder
-        Flash::add('info', 'E-Mail-Versand wird implementiert.');
-        header('Location: /protocols/edit?id=' . $protocolId);
+        // Redirect zur neuen MailController Route
+        $url = '/mail/send?protocol_id=' . urlencode($protocolId) . '&to=' . urlencode($to);
+        if ($version !== '') {
+            $url .= '&version=' . urlencode($version);
+        }
+        
+        header('Location: ' . $url);
+        exit;
     }
 
     /** Hilfsmethode für Dateigröße-Formatierung */
@@ -1241,5 +1809,220 @@ final class ProtocolsController
             $bytes /= 1024;
         }
         return round($bytes, 1) . ' ' . $units[$i];
+    }
+    
+    /** Protokoll-Event in die Datenbank loggen */
+    private function logProtocolEvent(\PDO $pdo, string $protocolId, string $eventType, string $message): void
+    {
+        try {
+            // 1. Event in protocol_events Tabelle loggen (für Tab "Ereignisse & Änderungen")
+            $this->logToProtocolEvents($pdo, $protocolId, $eventType, $message);
+            
+            // 2. Event auch im SystemLogger loggen (für /settings/systemlogs)
+            $this->logToSystemLog($protocolId, $eventType, $message);
+            
+        } catch (\Throwable $e) {
+            error_log('[Event] Exception beim Event-Logging: ' . $e->getMessage());
+            error_log('[Event] SQL Error Info: ' . print_r($pdo->errorInfo(), true));
+            // Event-Logging sollte nie die Hauptfunktion crashen
+        }
+    }
+    
+    /** Event in protocol_events Tabelle loggen */
+    private function logToProtocolEvents(\PDO $pdo, string $protocolId, string $eventType, string $message): void
+    {
+        try {
+            // Prüfe ob protocol_events Tabelle existiert
+            $stmt = $pdo->query("SHOW TABLES LIKE 'protocol_events'");
+            if ($stmt->rowCount() === 0) {
+                error_log('[Event] protocol_events Tabelle existiert nicht');
+                return;
+            }
+            
+            // Prüfe welche Spalten existieren
+            $stmt = $pdo->query("SHOW COLUMNS FROM protocol_events");
+            $columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            $hasCreatedBy = in_array('created_by', $columns);
+            
+            // Event einfügen mit oder ohne created_by
+            if ($hasCreatedBy) {
+                // Mit created_by Spalte
+                $stmt = $pdo->prepare("
+                    INSERT INTO protocol_events (id, protocol_id, type, message, created_by, created_at)
+                    VALUES (UUID(), ?, ?, ?, ?, NOW())
+                ");
+                
+                // Aktueller Benutzer aus Auth holen
+                $createdBy = 'system';
+                try {
+                    if (class_exists('\\App\\Auth') && method_exists('\\App\\Auth', 'currentUserEmail')) {
+                        $userEmail = \App\Auth::currentUserEmail();
+                        if (!empty($userEmail)) {
+                            $createdBy = $userEmail;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Fallback auf 'system'
+                }
+                
+                $success = $stmt->execute([$protocolId, $eventType, $message, $createdBy]);
+            } else {
+                // Ohne created_by Spalte (Fallback)
+                $stmt = $pdo->prepare("
+                    INSERT INTO protocol_events (id, protocol_id, type, message, created_at)
+                    VALUES (UUID(), ?, ?, ?, NOW())
+                ");
+                
+                $success = $stmt->execute([$protocolId, $eventType, $message]);
+            }
+            
+            if ($success) {
+                error_log('[ProtocolSave] protocol_events INSERT with created_by: SUCCESS');
+                error_log('[Event] Protokoll-Event geloggt: ' . $eventType . ' - ' . $message);
+            } else {
+                error_log('[Event] Fehler beim Event-Logging');
+            }
+            
+        } catch (\Throwable $e) {
+            error_log('[Event] protocol_events Exception: ' . $e->getMessage());
+            // Event-Logging sollte nie die Hauptfunktion crashen
+        }
+    }
+    
+    /** Event im SystemLogger loggen */
+    private function logToSystemLog(string $protocolId, string $eventType, string $message): void
+    {
+        try {
+            // Lade Protokoll-Daten für besseres Logging
+            $pdo = Database::pdo();
+            $stmt = $pdo->prepare("
+                SELECT p.tenant_name, p.type, o.city, o.street, o.house_no, u.label as unit_label
+                FROM protocols p 
+                JOIN units u ON u.id = p.unit_id 
+                JOIN objects o ON o.id = u.object_id 
+                WHERE p.id = ? AND p.deleted_at IS NULL
+            ");
+            $stmt->execute([$protocolId]);
+            $protocol = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$protocol) {
+                // Fallback wenn Protokoll nicht geladen werden kann
+                $protocol = ['tenant_name' => 'Unbekannt', 'type' => 'unknown'];
+            }
+            
+            // SystemLogger aufrufen basierend auf Event-Typ
+            switch ($eventType) {
+                case 'other':
+                    if (strpos($message, 'Protokoll bearbeitet') !== false) {
+                        // Parse Änderungen aus der Nachricht
+                        $changes = [];
+                        if (preg_match('/Änderungen: (.+)/', $message, $matches)) {
+                            $changesText = $matches[1];
+                            $changes = explode(', ', $changesText);
+                        }
+                        
+                        \App\SystemLogger::logProtocolUpdated($protocolId, [
+                            'tenant_name' => $protocol['tenant_name'],
+                            'type' => $protocol['type'],
+                            'city' => $protocol['city'] ?? '',
+                            'street' => $protocol['street'] ?? '',
+                            'unit' => $protocol['unit_label'] ?? ''
+                        ], $changes);
+                    } elseif (strpos($message, 'Protokoll angezeigt') !== false) {
+                        \App\SystemLogger::logProtocolViewed($protocolId, [
+                            'tenant_name' => $protocol['tenant_name'],
+                            'type' => $protocol['type'],
+                            'city' => $protocol['city'] ?? '',
+                            'street' => $protocol['street'] ?? '',
+                            'unit' => $protocol['unit_label'] ?? ''
+                        ]);
+                    } elseif (strpos($message, 'Protokoll gelöscht') !== false) {
+                        \App\SystemLogger::logProtocolDeleted($protocolId, [
+                            'tenant_name' => $protocol['tenant_name'],
+                            'type' => $protocol['type'],
+                            'city' => $protocol['city'] ?? '',
+                            'street' => $protocol['street'] ?? '',
+                            'unit' => $protocol['unit_label'] ?? ''
+                        ]);
+                    } elseif (strpos($message, 'PDF generiert') !== false) {
+                        \App\SystemLogger::logPdfGenerated($protocolId, [
+                            'tenant_name' => $protocol['tenant_name'],
+                            'type' => $protocol['type'],
+                            'city' => $protocol['city'] ?? '',
+                            'street' => $protocol['street'] ?? '',
+                            'unit' => $protocol['unit_label'] ?? ''
+                        ]);
+                    } else {
+                        // Allgemeines Protokoll-Event
+                        \App\SystemLogger::log(
+                            'protocol_' . $eventType,
+                            $message . ' (' . $protocol['tenant_name'] . ')',
+                            'protocol',
+                            $protocolId,
+                            [
+                                'protocol_type' => $protocol['type'],
+                                'property_address' => ($protocol['city'] ?? '') . ' ' . ($protocol['street'] ?? ''),
+                                'unit' => $protocol['unit_label'] ?? null
+                            ]
+                        );
+                    }
+                    break;
+                    
+                case 'signed_by_tenant':
+                case 'signed_by_owner':
+                    \App\SystemLogger::log(
+                        'protocol_signed',
+                        'Protokoll unterschrieben: ' . $protocol['tenant_name'] . ' (von ' . str_replace('signed_by_', '', $eventType) . ')',
+                        'protocol',
+                        $protocolId,
+                        [
+                            'signer_type' => str_replace('signed_by_', '', $eventType),
+                            'protocol_type' => $protocol['type'],
+                            'property_address' => ($protocol['city'] ?? '') . ' ' . ($protocol['street'] ?? ''),
+                            'unit' => $protocol['unit_label'] ?? null
+                        ]
+                    );
+                    break;
+                    
+                case 'sent_owner':
+                case 'sent_manager':
+                case 'sent_tenant':
+                    \App\SystemLogger::logEmailSent(
+                        $protocolId,
+                        [
+                            'tenant_name' => $protocol['tenant_name'],
+                            'type' => $protocol['type'],
+                            'city' => $protocol['city'] ?? '',
+                            'street' => $protocol['street'] ?? '',
+                            'unit' => $protocol['unit_label'] ?? ''
+                        ],
+                        str_replace('sent_', '', $eventType),
+                        'protocol'
+                    );
+                    break;
+                    
+                default:
+                    // Fallback für unbekannte Event-Typen
+                    \App\SystemLogger::log(
+                        'protocol_event',
+                        $message . ' (' . $protocol['tenant_name'] . ')',
+                        'protocol',
+                        $protocolId,
+                        [
+                            'event_type' => $eventType,
+                            'protocol_type' => $protocol['type'],
+                            'property_address' => ($protocol['city'] ?? '') . ' ' . ($protocol['street'] ?? ''),
+                            'unit' => $protocol['unit_label'] ?? null
+                        ]
+                    );
+                    break;
+            }
+            
+            error_log('[SystemLog] Event erfolgreich geloggt: ' . $eventType . ' - ' . $message);
+            
+        } catch (\Throwable $e) {
+            error_log('[SystemLog] Exception beim SystemLogger: ' . $e->getMessage());
+            // SystemLogger-Fehler sollten nie die Hauptfunktion crashen
+        }
     }
 }
